@@ -11,6 +11,23 @@ import (
 	"github.com/stellar/go-stellar-sdk/xdr"
 )
 
+// ValidateContractID validates a Soroban contract ID format.
+// Contract IDs are 56 characters starting with 'C'.
+func ValidateContractID(id string) error {
+	if len(id) != 56 {
+		return fmt.Errorf("invalid contract ID: must be 56 characters, got %d", len(id))
+	}
+	if id[0] != 'C' {
+		return fmt.Errorf("invalid contract ID: must start with 'C', got '%c'", id[0])
+	}
+	// Verify it's valid base32
+	_, err := strkey.Decode(strkey.VersionByteContract, id)
+	if err != nil {
+		return fmt.Errorf("invalid contract ID: %w", err)
+	}
+	return nil
+}
+
 // ContractInvoker builds and simulates Soroban contract invocations.
 type ContractInvoker struct {
 	client            *Client
@@ -328,6 +345,19 @@ func DecodeBool(val xdr.ScVal) (bool, error) {
 		return false, fmt.Errorf("not a Bool value")
 	}
 	return *val.B, nil
+}
+
+// DecodeVec decodes an SCVal Vec to a slice of ScVal.
+func DecodeVec(val xdr.ScVal) ([]xdr.ScVal, error) {
+	if val.Type != xdr.ScValTypeScvVec || val.Vec == nil || *val.Vec == nil {
+		return nil, fmt.Errorf("not a Vec value, got type %v", val.Type)
+	}
+	// val.Vec is **xdr.ScVec (which is **[]xdr.ScVal)
+	// Double dereference to get the underlying slice
+	vec := **val.Vec
+	result := make([]xdr.ScVal, len(vec))
+	copy(result, vec)
+	return result, nil
 }
 
 // DecodeAddress decodes an SCVal Address to string.

@@ -32,20 +32,7 @@ fn exp_scaled(x: i128) -> Result<i128, MarketError> {
     let mut term: i128 = SCALE_FACTOR; // Current term (x^n / n!)
 
     for n in 1..=EXP_ITERATIONS {
-        // term = term * x / n (maintaining scale)
-        term = term
-            .checked_mul(x)
-            .ok_or(MarketError::Overflow)?
-            .checked_div(n as i128)
-            .ok_or(MarketError::Overflow)?
-            .checked_div(SCALE_FACTOR)
-            .ok_or(MarketError::Overflow)?
-            .checked_mul(SCALE_FACTOR)
-            .ok_or(MarketError::Overflow)?
-            .checked_div(SCALE_FACTOR)
-            .ok_or(MarketError::Overflow)?;
-
-        // Simplified: term = term * x / (n * SCALE_FACTOR)
+        // term = term * x / (n * SCALE_FACTOR)
         term = term.checked_mul(x).ok_or(MarketError::Overflow)?;
         term = term.checked_div(n as i128 * SCALE_FACTOR).ok_or(MarketError::Overflow)?;
 
