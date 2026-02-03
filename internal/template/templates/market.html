@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{.Market.Question}} - Total</title>
+    <style>
+        :root {
+            --bg: #0a0a0a;
+            --card: #141414;
+            --border: #2a2a2a;
+            --text: #e0e0e0;
+            --text-muted: #888;
+            --yes: #22c55e;
+            --no: #ef4444;
+            --accent: #3b82f6;
+        }
+        body {
+            font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', monospace;
+            background: var(--bg);
+            color: var(--text);
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 2rem;
+            line-height: 1.6;
+        }
+        h1 {
+            color: var(--text);
+            font-size: 1.5rem;
+            margin-bottom: 0.5rem;
+        }
+        .nav {
+            margin-bottom: 2rem;
+        }
+        .nav a {
+            color: var(--accent);
+            text-decoration: none;
+        }
+        .description {
+            color: var(--text-muted);
+            margin-bottom: 2rem;
+        }
+        .section {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+        .section-title {
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 1rem;
+        }
+        .prices {
+            display: flex;
+            gap: 3rem;
+        }
+        .price-box {
+            flex: 1;
+        }
+        .price-label {
+            font-size: 1rem;
+            margin-bottom: 0.5rem;
+        }
+        .price-value {
+            font-size: 2.5rem;
+            font-weight: bold;
+        }
+        .price-yes {
+            color: var(--yes);
+        }
+        .price-no {
+            color: var(--no);
+        }
+        .chart {
+            font-size: 0.75rem;
+            line-height: 1.2;
+            white-space: pre;
+            overflow-x: auto;
+        }
+        .bar-chart {
+            font-size: 0.9rem;
+            line-height: 1.5;
+            white-space: pre;
+        }
+        form {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+        label {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+        input, select {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            padding: 0.75rem;
+            color: var(--text);
+            font-family: inherit;
+            font-size: 1rem;
+        }
+        input:focus, select:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+        .radio-group {
+            display: flex;
+            gap: 1rem;
+        }
+        .radio-option {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .radio-option input[type="radio"] {
+            width: auto;
+        }
+        .btn {
+            padding: 0.75rem 1.5rem;
+            background: var(--accent);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 1rem;
+        }
+        .btn:hover {
+            opacity: 0.9;
+        }
+        .btn-yes {
+            background: var(--yes);
+        }
+        .btn-no {
+            background: var(--no);
+        }
+        .meta {
+            color: var(--text-muted);
+            font-size: 0.85rem;
+        }
+        .meta-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid var(--border);
+        }
+        .meta-row:last-child {
+            border-bottom: none;
+        }
+        .resolved-banner {
+            background: var(--accent);
+            color: white;
+            padding: 1rem;
+            border-radius: 8px;
+            text-align: center;
+            margin-bottom: 1.5rem;
+        }
+        .resolve-form {
+            display: flex;
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <nav class="nav">
+        <a href="/">← Back to Markets</a>
+    </nav>
+
+    <h1>{{.Market.Question}}</h1>
+    {{if .Market.Description}}
+    <p class="description">{{.Market.Description}}</p>
+    {{end}}
+
+    {{if .Market.IsResolved}}
+    <div class="resolved-banner">
+        Market Resolved: <strong>{{.Market.Resolution}}</strong> wins
+    </div>
+    {{end}}
+
+    <div class="section">
+        <div class="section-title">Current Prices</div>
+        <div class="prices">
+            <div class="price-box">
+                <div class="price-label">YES</div>
+                <div class="price-value price-yes">{{printf "%.1f" (mul .Market.PriceYes 100)}}%</div>
+            </div>
+            <div class="price-box">
+                <div class="price-label">NO</div>
+                <div class="price-value price-no">{{printf "%.1f" (mul .Market.PriceNo 100)}}%</div>
+            </div>
+        </div>
+        <div class="bar-chart">{{.BarChart}}</div>
+    </div>
+
+    <div class="section">
+        <div class="section-title">Price History</div>
+        <div class="chart">{{.PriceChart}}</div>
+    </div>
+
+    {{if not .Market.IsResolved}}
+    <div class="section">
+        <div class="section-title">Buy Outcome Tokens</div>
+        <form method="POST" action="/market/{{.Market.ID}}/buy">
+            <div class="form-group">
+                <label>Your Stellar Public Key</label>
+                <input type="text" name="user_public_key" placeholder="G..." required pattern="G[A-Z2-7]{55}">
+            </div>
+
+            <div class="form-group">
+                <label>Outcome</label>
+                <div class="radio-group">
+                    <label class="radio-option">
+                        <input type="radio" name="outcome" value="YES" required>
+                        <span class="price-yes">YES</span>
+                    </label>
+                    <label class="radio-option">
+                        <input type="radio" name="outcome" value="NO">
+                        <span class="price-no">NO</span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Amount (tokens)</label>
+                <input type="number" name="amount" min="0.01" step="0.01" value="10" required>
+            </div>
+
+            <button type="submit" class="btn">Get Transaction XDR</button>
+        </form>
+    </div>
+
+    {{if eq .Market.ID .OraclePublicKey}}
+    <div class="section">
+        <div class="section-title">Oracle: Resolve Market</div>
+        <form method="POST" action="/market/{{.Market.ID}}/resolve">
+            <div class="form-group">
+                <label>Winning Outcome</label>
+                <div class="radio-group">
+                    <label class="radio-option">
+                        <input type="radio" name="outcome" value="YES" required>
+                        <span class="price-yes">YES</span>
+                    </label>
+                    <label class="radio-option">
+                        <input type="radio" name="outcome" value="NO">
+                        <span class="price-no">NO</span>
+                    </label>
+                </div>
+            </div>
+            <button type="submit" class="btn">Generate Resolve Transaction</button>
+        </form>
+    </div>
+    {{end}}
+    {{end}}
+
+    <div class="section meta">
+        <div class="section-title">Market Details</div>
+        <div class="meta-row">
+            <span>Market ID</span>
+            <span>{{.Market.ID}}</span>
+        </div>
+        <div class="meta-row">
+            <span>YES Token</span>
+            <span>{{.Market.YesAsset}}</span>
+        </div>
+        <div class="meta-row">
+            <span>NO Token</span>
+            <span>{{.Market.NoAsset}}</span>
+        </div>
+        <div class="meta-row">
+            <span>Liquidity (b)</span>
+            <span>{{printf "%.0f" .Market.LiquidityParam}}</span>
+        </div>
+        <div class="meta-row">
+            <span>Volume YES</span>
+            <span>{{printf "%.2f" .Market.YesSold}} tokens</span>
+        </div>
+        <div class="meta-row">
+            <span>Volume NO</span>
+            <span>{{printf "%.2f" .Market.NoSold}} tokens</span>
+        </div>
+        {{if .Market.MetadataHash}}
+        <div class="meta-row">
+            <span>IPFS Hash</span>
+            <span><a href="https://gateway.pinata.cloud/ipfs/{{.Market.MetadataHash}}" target="_blank">{{.Market.MetadataHash}}</a></span>
+        </div>
+        {{end}}
+    </div>
+</body>
+</html>

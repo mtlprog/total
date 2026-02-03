@@ -1,4 +1,4 @@
-.PHONY: build build-linux dev dev-restart dev-logs dev-down db db-reset run test fmt vet lint clean mocks
+.PHONY: build build-linux dev dev-restart dev-logs dev-down run test fmt vet lint clean
 
 # Build for local macOS
 build:
@@ -25,20 +25,9 @@ dev-logs:
 dev-down:
 	docker compose down
 
-# Start only PostgreSQL
-db:
-	docker compose up -d db
-
-# Reset database (stop, remove volume, start fresh)
-db-reset:
-	docker compose down -v
-	docker compose up -d db
-	@echo "Waiting for db..."
-	@sleep 3
-
-# Run locally (requires PostgreSQL running)
+# Run locally (requires ORACLE_PUBLIC_KEY)
 run: build
-	./total --database-url "postgres://total:total@localhost:5432/total?sslmode=disable" serve
+	./total serve --oracle-public-key "${ORACLE_PUBLIC_KEY}"
 
 # Run tests
 test:
@@ -63,7 +52,3 @@ lint: fmt vet
 clean:
 	rm -f total
 	docker compose down -v
-
-# Regenerate mocks
-mocks:
-	mockery

@@ -11,10 +11,11 @@ import (
 	"time"
 
 	"github.com/mtlprog/total/internal/config"
-	"github.com/mtlprog/total/internal/database"
 	"github.com/mtlprog/total/internal/handler"
+	"github.com/mtlprog/total/internal/ipfs"
 	"github.com/mtlprog/total/internal/logger"
-	"github.com/mtlprog/total/internal/repository"
+	"github.com/mtlprog/total/internal/service"
+	"github.com/mtlprog/total/internal/stellar"
 	"github.com/mtlprog/total/internal/template"
 	"github.com/urfave/cli/v2"
 )
@@ -22,7 +23,7 @@ import (
 func main() {
 	app := &cli.App{
 		Name:  "total",
-		Usage: "Total application",
+		Usage: "Stellar prediction market platform",
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:    "log-level",
@@ -30,14 +31,6 @@ func main() {
 				Value:   "info",
 				Usage:   "Log level (debug, info, warn, error)",
 				EnvVars: []string{"LOG_LEVEL"},
-			},
-			&cli.StringFlag{
-				Name:     "database-url",
-				Aliases:  []string{"d"},
-				Value:    config.DefaultDatabaseURL,
-				Usage:    "PostgreSQL database URL",
-				EnvVars:  []string{"DATABASE_URL"},
-				Required: true,
 			},
 		},
 		Before: func(c *cli.Context) error {
@@ -56,6 +49,44 @@ func main() {
 						Usage:   "HTTP server port",
 						EnvVars: []string{"PORT"},
 					},
+					&cli.StringFlag{
+						Name:    "horizon-url",
+						Value:   config.DefaultHorizonURL,
+						Usage:   "Stellar Horizon API URL",
+						EnvVars: []string{"HORIZON_URL"},
+					},
+					&cli.StringFlag{
+						Name:    "network-passphrase",
+						Value:   config.DefaultNetworkPassphrase,
+						Usage:   "Stellar network passphrase",
+						EnvVars: []string{"NETWORK_PASSPHRASE"},
+					},
+					&cli.StringFlag{
+						Name:     "oracle-public-key",
+						Usage:    "Oracle public key (Stellar account that creates/resolves markets)",
+						EnvVars:  []string{"ORACLE_PUBLIC_KEY"},
+						Required: true,
+					},
+					&cli.StringFlag{
+						Name:    "oracle-secret-key",
+						Usage:   "Oracle secret key for signing market transactions (S...)",
+						EnvVars: []string{"ORACLE_SECRET_KEY"},
+					},
+					&cli.StringFlag{
+						Name:    "pinata-api-key",
+						Usage:   "Pinata API key for IPFS",
+						EnvVars: []string{"PINATA_API_KEY"},
+					},
+					&cli.StringFlag{
+						Name:    "pinata-secret",
+						Usage:   "Pinata API secret for IPFS",
+						EnvVars: []string{"PINATA_SECRET"},
+					},
+					&cli.StringSliceFlag{
+						Name:    "market-ids",
+						Usage:   "Known market IDs to track (comma-separated)",
+						EnvVars: []string{"MARKET_IDS"},
+					},
 				},
 				Action: runServe,
 			},
@@ -70,41 +101,62 @@ func main() {
 }
 
 func runServe(c *cli.Context) error {
-	ctx := c.Context
-
 	port := c.String("port")
 	if port == "" {
 		port = config.DefaultPort
 	}
-	databaseURL := c.String("database-url")
 
-	db, err := database.New(ctx, databaseURL)
+	horizonURL := c.String("horizon-url")
+	networkPassphrase := c.String("network-passphrase")
+	oraclePublicKey := c.String("oracle-public-key")
+	oracleSecretKey := c.String("oracle-secret-key")
+	pinataAPIKey := c.String("pinata-api-key")
+	pinataSecret := c.String("pinata-secret")
+	marketIDs := c.StringSlice("market-ids")
+
+	// Initialize Stellar client
+	stellarClient := stellar.NewHorizonClient(horizonURL, networkPassphrase)
+
+	// Initialize transaction builder
+	txBuilder, err := stellar.NewBuilder(stellarClient, networkPassphrase, config.DefaultBaseFee, oracleSecretKey)
 	if err != nil {
-		return fmt.Errorf("failed to connect to database: %w", err)
-	}
-	defer db.Close()
-
-	if err := database.RunMigrations(ctx, db.Pool()); err != nil {
-		return fmt.Errorf("failed to run migrations: %w", err)
+		return fmt.Errorf("failed to create transaction builder: %w", err)
 	}
 
+	// Initialize IPFS client
+	ipfsClient := ipfs.NewClient(pinataAPIKey, pinataSecret)
+
+	// Initialize market service
+	marketService := service.NewMarketService(
+		stellarClient,
+		txBuilder,
+		ipfsClient,
+		oraclePublicKey,
+		slog.Default(),
+	)
+
+	// Initialize templates
 	tmpl, err := template.New()
 	if err != nil {
 		return fmt.Errorf("failed to load templates: %w", err)
 	}
 
-	repo, err := repository.New(db.Pool())
-	if err != nil {
-		return fmt.Errorf("failed to create repository: %w", err)
+	// Initialize handler
+	marketHandler := handler.NewMarketHandler(
+		marketService,
+		tmpl,
+		oraclePublicKey,
+		slog.Default(),
+	)
+
+	// Set known market IDs
+	if len(marketIDs) > 0 {
+		marketHandler.SetMarketIDs(marketIDs)
 	}
 
-	h, err := handler.New(repo, tmpl)
-	if err != nil {
-		return fmt.Errorf("failed to create handler: %w", err)
-	}
-
+	// Register routes
 	mux := http.NewServeMux()
-	h.RegisterRoutes(mux)
+	marketHandler.RegisterRoutes(mux)
 
 	server := &http.Server{
 		Addr:         ":" + port,
@@ -119,7 +171,11 @@ func runServe(c *cli.Context) error {
 	signal.Notify(done, os.Interrupt, syscall.SIGTERM)
 
 	go func() {
-		slog.Info("starting server", "server_addr", "http://localhost:"+port)
+		slog.Info("starting server",
+			"addr", "http://localhost:"+port,
+			"horizon", horizonURL,
+			"oracle", oraclePublicKey,
+		)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			serverErr <- err
 		}
