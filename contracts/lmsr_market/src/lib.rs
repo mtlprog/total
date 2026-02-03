@@ -5,7 +5,7 @@ mod lmsr;
 mod storage;
 
 use error::MarketError;
-use soroban_sdk::{contract, contractimpl, token, Address, BytesN, Env, String};
+use soroban_sdk::{contract, contractimpl, token, Address, Env, String};
 use storage::{DataKey, OUTCOME_NO, OUTCOME_YES, SCALE_FACTOR};
 
 /// LMSR Prediction Market Contract
@@ -88,7 +88,9 @@ impl LmsrMarket {
     /// * `user` - User buying tokens (must authorize)
     /// * `outcome` - 0 for YES, 1 for NO
     /// * `amount` - Amount of tokens to buy (scaled by 10^7)
-    /// * `max_cost` - Maximum collateral willing to pay (slippage protection)
+    /// * `max_cost` - Maximum collateral willing to pay (slippage protection).
+    ///                The transaction reverts if calculated cost exceeds this value,
+    ///                protecting users from price movements between quote and execution.
     ///
     /// # Returns
     /// Actual cost paid in collateral
@@ -113,9 +115,21 @@ impl LmsrMarket {
         user.require_auth();
 
         // Get current state
-        let b: i128 = env.storage().instance().get(&DataKey::LiquidityParam).unwrap();
-        let q_yes: i128 = env.storage().instance().get(&DataKey::YesSold).unwrap();
-        let q_no: i128 = env.storage().instance().get(&DataKey::NoSold).unwrap();
+        let b: i128 = env
+            .storage()
+            .instance()
+            .get(&DataKey::LiquidityParam)
+            .ok_or(MarketError::StorageCorrupted)?;
+        let q_yes: i128 = env
+            .storage()
+            .instance()
+            .get(&DataKey::YesSold)
+            .ok_or(MarketError::StorageCorrupted)?;
+        let q_no: i128 = env
+            .storage()
+            .instance()
+            .get(&DataKey::NoSold)
+            .ok_or(MarketError::StorageCorrupted)?;
 
         // Calculate cost
         let cost = lmsr::calculate_buy_cost(q_yes, q_no, amount, outcome, b)?;
@@ -129,7 +143,7 @@ impl LmsrMarket {
             .storage()
             .instance()
             .get(&DataKey::CollateralToken)
-            .unwrap();
+            .ok_or(MarketError::StorageCorrupted)?;
         let token_client = token::Client::new(&env, &collateral_token);
         token_client.transfer(&user, &env.current_contract_address(), &cost);
 
@@ -148,7 +162,7 @@ impl LmsrMarket {
             .storage()
             .instance()
             .get(&DataKey::CollateralPool)
-            .unwrap();
+            .ok_or(MarketError::StorageCorrupted)?;
         env.storage()
             .instance()
             .set(&DataKey::CollateralPool, &(pool + cost));
@@ -200,9 +214,21 @@ impl LmsrMarket {
         }
 
         // Get current state
-        let b: i128 = env.storage().instance().get(&DataKey::LiquidityParam).unwrap();
-        let q_yes: i128 = env.storage().instance().get(&DataKey::YesSold).unwrap();
-        let q_no: i128 = env.storage().instance().get(&DataKey::NoSold).unwrap();
+        let b: i128 = env
+            .storage()
+            .instance()
+            .get(&DataKey::LiquidityParam)
+            .ok_or(MarketError::StorageCorrupted)?;
+        let q_yes: i128 = env
+            .storage()
+            .instance()
+            .get(&DataKey::YesSold)
+            .ok_or(MarketError::StorageCorrupted)?;
+        let q_no: i128 = env
+            .storage()
+            .instance()
+            .get(&DataKey::NoSold)
+            .ok_or(MarketError::StorageCorrupted)?;
 
         // Calculate return
         let return_amount = lmsr::calculate_sell_return(q_yes, q_no, amount, outcome, b)?;
@@ -226,7 +252,7 @@ impl LmsrMarket {
             .storage()
             .instance()
             .get(&DataKey::CollateralPool)
-            .unwrap();
+            .ok_or(MarketError::StorageCorrupted)?;
         env.storage()
             .instance()
             .set(&DataKey::CollateralPool, &(pool - return_amount));
@@ -241,7 +267,7 @@ impl LmsrMarket {
             .storage()
             .instance()
             .get(&DataKey::CollateralToken)
-            .unwrap();
+            .ok_or(MarketError::StorageCorrupted)?;
         let token_client = token::Client::new(&env, &collateral_token);
         token_client.transfer(&env.current_contract_address(), &user, &return_amount);
 
@@ -262,7 +288,11 @@ impl LmsrMarket {
         }
 
         // Verify caller is oracle
-        let stored_oracle: Address = env.storage().instance().get(&DataKey::Oracle).unwrap();
+        let stored_oracle: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Oracle)
+            .ok_or(MarketError::StorageCorrupted)?;
         if oracle != stored_oracle {
             return Err(MarketError::Unauthorized);
         }
@@ -278,7 +308,9 @@ impl LmsrMarket {
     }
 
     /// Claim winnings after market resolution.
-    /// Each winning token is redeemable for 1 unit of collateral.
+    /// Each winning token is redeemable for 1 unit of collateral (1:1 redemption).
+    /// This means the total payout equals the user's winning token balance.
+    /// Note: Losing tokens have zero value and are not claimed.
     ///
     /// # Arguments
     /// * `user` - User claiming (must authorize)
@@ -295,7 +327,7 @@ impl LmsrMarket {
             .storage()
             .instance()
             .get(&DataKey::WinningOutcome)
-            .unwrap();
+            .ok_or(MarketError::StorageCorrupted)?;
 
         // Get user's winning token balance
         let balance_key = DataKey::UserBalance(user.clone(), winning_outcome);
@@ -316,7 +348,7 @@ impl LmsrMarket {
             .storage()
             .instance()
             .get(&DataKey::CollateralPool)
-            .unwrap();
+            .ok_or(MarketError::StorageCorrupted)?;
         env.storage()
             .instance()
             .set(&DataKey::CollateralPool, &(pool - payout));
@@ -326,7 +358,7 @@ impl LmsrMarket {
             .storage()
             .instance()
             .get(&DataKey::CollateralToken)
-            .unwrap();
+            .ok_or(MarketError::StorageCorrupted)?;
         let token_client = token::Client::new(&env, &collateral_token);
         token_client.transfer(&env.current_contract_address(), &user, &payout);
 
@@ -340,9 +372,21 @@ impl LmsrMarket {
     pub fn get_price(env: Env, outcome: u32) -> Result<i128, MarketError> {
         Self::require_initialized(&env)?;
 
-        let b: i128 = env.storage().instance().get(&DataKey::LiquidityParam).unwrap();
-        let q_yes: i128 = env.storage().instance().get(&DataKey::YesSold).unwrap();
-        let q_no: i128 = env.storage().instance().get(&DataKey::NoSold).unwrap();
+        let b: i128 = env
+            .storage()
+            .instance()
+            .get(&DataKey::LiquidityParam)
+            .ok_or(MarketError::StorageCorrupted)?;
+        let q_yes: i128 = env
+            .storage()
+            .instance()
+            .get(&DataKey::YesSold)
+            .ok_or(MarketError::StorageCorrupted)?;
+        let q_no: i128 = env
+            .storage()
+            .instance()
+            .get(&DataKey::NoSold)
+            .ok_or(MarketError::StorageCorrupted)?;
 
         lmsr::calculate_price(q_yes, q_no, outcome, b)
     }
@@ -362,9 +406,21 @@ impl LmsrMarket {
             return Err(MarketError::InvalidAmount);
         }
 
-        let b: i128 = env.storage().instance().get(&DataKey::LiquidityParam).unwrap();
-        let q_yes: i128 = env.storage().instance().get(&DataKey::YesSold).unwrap();
-        let q_no: i128 = env.storage().instance().get(&DataKey::NoSold).unwrap();
+        let b: i128 = env
+            .storage()
+            .instance()
+            .get(&DataKey::LiquidityParam)
+            .ok_or(MarketError::StorageCorrupted)?;
+        let q_yes: i128 = env
+            .storage()
+            .instance()
+            .get(&DataKey::YesSold)
+            .ok_or(MarketError::StorageCorrupted)?;
+        let q_no: i128 = env
+            .storage()
+            .instance()
+            .get(&DataKey::NoSold)
+            .ok_or(MarketError::StorageCorrupted)?;
 
         let cost = lmsr::calculate_buy_cost(q_yes, q_no, amount, outcome, b)?;
 
@@ -393,14 +449,26 @@ impl LmsrMarket {
     pub fn get_state(env: Env) -> Result<(i128, i128, i128, bool), MarketError> {
         Self::require_initialized(&env)?;
 
-        let q_yes: i128 = env.storage().instance().get(&DataKey::YesSold).unwrap();
-        let q_no: i128 = env.storage().instance().get(&DataKey::NoSold).unwrap();
+        let q_yes: i128 = env
+            .storage()
+            .instance()
+            .get(&DataKey::YesSold)
+            .ok_or(MarketError::StorageCorrupted)?;
+        let q_no: i128 = env
+            .storage()
+            .instance()
+            .get(&DataKey::NoSold)
+            .ok_or(MarketError::StorageCorrupted)?;
         let pool: i128 = env
             .storage()
             .instance()
             .get(&DataKey::CollateralPool)
-            .unwrap();
-        let resolved: bool = env.storage().instance().get(&DataKey::Resolved).unwrap();
+            .ok_or(MarketError::StorageCorrupted)?;
+        let resolved: bool = env
+            .storage()
+            .instance()
+            .get(&DataKey::Resolved)
+            .ok_or(MarketError::StorageCorrupted)?;
 
         Ok((q_yes, q_no, pool, resolved))
     }
@@ -408,28 +476,29 @@ impl LmsrMarket {
     /// Get the oracle address.
     pub fn get_oracle(env: Env) -> Result<Address, MarketError> {
         Self::require_initialized(&env)?;
-        Ok(env.storage().instance().get(&DataKey::Oracle).unwrap())
+        env.storage()
+            .instance()
+            .get(&DataKey::Oracle)
+            .ok_or(MarketError::StorageCorrupted)
     }
 
     /// Get the liquidity parameter.
     pub fn get_liquidity_param(env: Env) -> Result<i128, MarketError> {
         Self::require_initialized(&env)?;
-        Ok(env
-            .storage()
+        env.storage()
             .instance()
             .get(&DataKey::LiquidityParam)
-            .unwrap())
+            .ok_or(MarketError::StorageCorrupted)
     }
 
     /// Get the winning outcome (only valid after resolution).
     pub fn get_winning_outcome(env: Env) -> Result<u32, MarketError> {
         Self::require_initialized(&env)?;
         Self::require_resolved(&env)?;
-        Ok(env
-            .storage()
+        env.storage()
             .instance()
             .get(&DataKey::WinningOutcome)
-            .unwrap())
+            .ok_or(MarketError::StorageCorrupted)
     }
 
     // --- Internal helpers ---
@@ -442,7 +511,11 @@ impl LmsrMarket {
     }
 
     fn require_not_resolved(env: &Env) -> Result<(), MarketError> {
-        let resolved: bool = env.storage().instance().get(&DataKey::Resolved).unwrap();
+        let resolved: bool = env
+            .storage()
+            .instance()
+            .get(&DataKey::Resolved)
+            .ok_or(MarketError::StorageCorrupted)?;
         if resolved {
             return Err(MarketError::AlreadyResolved);
         }
@@ -450,7 +523,11 @@ impl LmsrMarket {
     }
 
     fn require_resolved(env: &Env) -> Result<(), MarketError> {
-        let resolved: bool = env.storage().instance().get(&DataKey::Resolved).unwrap();
+        let resolved: bool = env
+            .storage()
+            .instance()
+            .get(&DataKey::Resolved)
+            .ok_or(MarketError::StorageCorrupted)?;
         if !resolved {
             return Err(MarketError::NotResolved);
         }
@@ -520,7 +597,6 @@ mod test {
 
         // Create a user and mint tokens
         let user = Address::generate(&env);
-        let token_admin = Address::generate(&env);
         let token_admin_client = StellarAssetClient::new(&env, &token_address);
         token_admin_client.mint(&user, &(100 * SCALE_FACTOR));
 
@@ -596,5 +672,367 @@ mod test {
             "Expected price_no near 5_000_000, got {}",
             price_no
         );
+    }
+
+    // --- Authorization tests ---
+
+    #[test]
+    #[should_panic(expected = "Error(Contract, #10)")] // Unauthorized = 10
+    fn test_resolve_by_non_oracle_fails() {
+        let (env, contract_id, oracle, token_address) = setup_test();
+        let client = LmsrMarketClient::new(&env, &contract_id);
+
+        let b = 100 * SCALE_FACTOR;
+        let initial_funding = 70 * SCALE_FACTOR;
+
+        client.initialize(
+            &oracle,
+            &token_address,
+            &b,
+            &String::from_str(&env, "QmTest"),
+            &initial_funding,
+        );
+
+        // Try to resolve with non-oracle address
+        let attacker = Address::generate(&env);
+        client.resolve(&attacker, &0); // Should panic with Unauthorized
+    }
+
+    // --- Double-claim prevention tests ---
+
+    #[test]
+    #[should_panic(expected = "Error(Contract, #13)")] // NothingToClaim = 13
+    fn test_double_claim_fails() {
+        let (env, contract_id, oracle, token_address) = setup_test();
+        let client = LmsrMarketClient::new(&env, &contract_id);
+
+        let b = 100 * SCALE_FACTOR;
+        let initial_funding = 70 * SCALE_FACTOR;
+
+        client.initialize(
+            &oracle,
+            &token_address,
+            &b,
+            &String::from_str(&env, "QmTest"),
+            &initial_funding,
+        );
+
+        // User buys YES tokens
+        let user = Address::generate(&env);
+        let token_admin_client = StellarAssetClient::new(&env, &token_address);
+        token_admin_client.mint(&user, &(100 * SCALE_FACTOR));
+
+        let amount = 10 * SCALE_FACTOR;
+        client.buy(&user, &0, &amount, &(50 * SCALE_FACTOR));
+
+        // Resolve market with YES winning
+        client.resolve(&oracle, &0);
+
+        // First claim succeeds
+        client.claim(&user);
+
+        // Second claim should fail
+        client.claim(&user); // Should panic with NothingToClaim
+    }
+
+    // --- Slippage protection tests ---
+
+    #[test]
+    #[should_panic(expected = "Error(Contract, #8)")] // SlippageExceeded = 8
+    fn test_buy_slippage_exceeded() {
+        let (env, contract_id, oracle, token_address) = setup_test();
+        let client = LmsrMarketClient::new(&env, &contract_id);
+
+        let b = 100 * SCALE_FACTOR;
+        let initial_funding = 70 * SCALE_FACTOR;
+
+        client.initialize(
+            &oracle,
+            &token_address,
+            &b,
+            &String::from_str(&env, "QmTest"),
+            &initial_funding,
+        );
+
+        let user = Address::generate(&env);
+        let token_admin_client = StellarAssetClient::new(&env, &token_address);
+        token_admin_client.mint(&user, &(100 * SCALE_FACTOR));
+
+        // Try to buy with max_cost = 0 (impossible)
+        let amount = 10 * SCALE_FACTOR;
+        client.buy(&user, &0, &amount, &0); // Should panic with SlippageExceeded
+    }
+
+    #[test]
+    #[should_panic(expected = "Error(Contract, #9)")] // ReturnTooLow = 9
+    fn test_sell_min_return_not_met() {
+        let (env, contract_id, oracle, token_address) = setup_test();
+        let client = LmsrMarketClient::new(&env, &contract_id);
+
+        let b = 100 * SCALE_FACTOR;
+        let initial_funding = 70 * SCALE_FACTOR;
+
+        client.initialize(
+            &oracle,
+            &token_address,
+            &b,
+            &String::from_str(&env, "QmTest"),
+            &initial_funding,
+        );
+
+        let user = Address::generate(&env);
+        let token_admin_client = StellarAssetClient::new(&env, &token_address);
+        token_admin_client.mint(&user, &(100 * SCALE_FACTOR));
+
+        // First buy some tokens
+        let amount = 10 * SCALE_FACTOR;
+        client.buy(&user, &0, &amount, &(50 * SCALE_FACTOR));
+
+        // Try to sell with impossibly high min_return
+        client.sell(&user, &0, &amount, &(i128::MAX / 2)); // Should panic with ReturnTooLow
+    }
+
+    // --- Sell function tests ---
+
+    #[test]
+    fn test_sell_basic() {
+        let (env, contract_id, oracle, token_address) = setup_test();
+        let client = LmsrMarketClient::new(&env, &contract_id);
+
+        let b = 100 * SCALE_FACTOR;
+        let initial_funding = 70 * SCALE_FACTOR;
+
+        client.initialize(
+            &oracle,
+            &token_address,
+            &b,
+            &String::from_str(&env, "QmTest"),
+            &initial_funding,
+        );
+
+        let user = Address::generate(&env);
+        let token_admin_client = StellarAssetClient::new(&env, &token_address);
+        token_admin_client.mint(&user, &(100 * SCALE_FACTOR));
+
+        // Buy tokens
+        let amount = 10 * SCALE_FACTOR;
+        let buy_cost = client.buy(&user, &0, &amount, &(50 * SCALE_FACTOR));
+        assert_eq!(client.get_balance(&user, &0), amount);
+
+        // Sell half the tokens
+        let sell_amount = 5 * SCALE_FACTOR;
+        let sell_return = client.sell(&user, &0, &sell_amount, &0);
+        assert!(sell_return > 0, "Sell return should be positive");
+        assert_eq!(client.get_balance(&user, &0), amount - sell_amount);
+
+        // Sell return should be less than buy cost (round-trip loss expected)
+        assert!(
+            sell_return < buy_cost,
+            "Selling should return less than buying cost due to price movement"
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "Error(Contract, #7)")] // InsufficientBalance = 7
+    fn test_sell_insufficient_balance() {
+        let (env, contract_id, oracle, token_address) = setup_test();
+        let client = LmsrMarketClient::new(&env, &contract_id);
+
+        let b = 100 * SCALE_FACTOR;
+        let initial_funding = 70 * SCALE_FACTOR;
+
+        client.initialize(
+            &oracle,
+            &token_address,
+            &b,
+            &String::from_str(&env, "QmTest"),
+            &initial_funding,
+        );
+
+        let user = Address::generate(&env);
+        let token_admin_client = StellarAssetClient::new(&env, &token_address);
+        token_admin_client.mint(&user, &(100 * SCALE_FACTOR));
+
+        // Buy a small amount
+        client.buy(&user, &0, &(5 * SCALE_FACTOR), &(50 * SCALE_FACTOR));
+
+        // Try to sell more than owned
+        client.sell(&user, &0, &(10 * SCALE_FACTOR), &0); // Should panic
+    }
+
+    #[test]
+    #[should_panic(expected = "Error(Contract, #3)")] // AlreadyResolved = 3
+    fn test_sell_after_resolution_fails() {
+        let (env, contract_id, oracle, token_address) = setup_test();
+        let client = LmsrMarketClient::new(&env, &contract_id);
+
+        let b = 100 * SCALE_FACTOR;
+        let initial_funding = 70 * SCALE_FACTOR;
+
+        client.initialize(
+            &oracle,
+            &token_address,
+            &b,
+            &String::from_str(&env, "QmTest"),
+            &initial_funding,
+        );
+
+        let user = Address::generate(&env);
+        let token_admin_client = StellarAssetClient::new(&env, &token_address);
+        token_admin_client.mint(&user, &(100 * SCALE_FACTOR));
+
+        // Buy tokens
+        client.buy(&user, &0, &(10 * SCALE_FACTOR), &(50 * SCALE_FACTOR));
+
+        // Resolve market
+        client.resolve(&oracle, &0);
+
+        // Try to sell after resolution
+        client.sell(&user, &0, &(5 * SCALE_FACTOR), &0); // Should panic
+    }
+
+    // --- Market lifecycle error state tests ---
+
+    #[test]
+    #[should_panic(expected = "Error(Contract, #2)")] // NotInitialized = 2
+    fn test_buy_on_uninitialized_contract() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let contract_id = env.register(LmsrMarket, ());
+        let client = LmsrMarketClient::new(&env, &contract_id);
+
+        let user = Address::generate(&env);
+        client.buy(&user, &0, &(10 * SCALE_FACTOR), &(50 * SCALE_FACTOR));
+    }
+
+    #[test]
+    #[should_panic(expected = "Error(Contract, #3)")] // AlreadyResolved = 3
+    fn test_buy_on_resolved_market() {
+        let (env, contract_id, oracle, token_address) = setup_test();
+        let client = LmsrMarketClient::new(&env, &contract_id);
+
+        let b = 100 * SCALE_FACTOR;
+        let initial_funding = 70 * SCALE_FACTOR;
+
+        client.initialize(
+            &oracle,
+            &token_address,
+            &b,
+            &String::from_str(&env, "QmTest"),
+            &initial_funding,
+        );
+
+        // Resolve immediately
+        client.resolve(&oracle, &0);
+
+        // Try to buy after resolution
+        let user = Address::generate(&env);
+        let token_admin_client = StellarAssetClient::new(&env, &token_address);
+        token_admin_client.mint(&user, &(100 * SCALE_FACTOR));
+        client.buy(&user, &0, &(10 * SCALE_FACTOR), &(50 * SCALE_FACTOR));
+    }
+
+    #[test]
+    #[should_panic(expected = "Error(Contract, #4)")] // NotResolved = 4
+    fn test_claim_on_unresolved_market() {
+        let (env, contract_id, oracle, token_address) = setup_test();
+        let client = LmsrMarketClient::new(&env, &contract_id);
+
+        let b = 100 * SCALE_FACTOR;
+        let initial_funding = 70 * SCALE_FACTOR;
+
+        client.initialize(
+            &oracle,
+            &token_address,
+            &b,
+            &String::from_str(&env, "QmTest"),
+            &initial_funding,
+        );
+
+        let user = Address::generate(&env);
+        let token_admin_client = StellarAssetClient::new(&env, &token_address);
+        token_admin_client.mint(&user, &(100 * SCALE_FACTOR));
+
+        // Buy tokens but don't resolve
+        client.buy(&user, &0, &(10 * SCALE_FACTOR), &(50 * SCALE_FACTOR));
+
+        // Try to claim without resolution
+        client.claim(&user); // Should panic
+    }
+
+    #[test]
+    #[should_panic(expected = "Error(Contract, #13)")] // NothingToClaim = 13
+    fn test_loser_cannot_claim() {
+        let (env, contract_id, oracle, token_address) = setup_test();
+        let client = LmsrMarketClient::new(&env, &contract_id);
+
+        let b = 100 * SCALE_FACTOR;
+        let initial_funding = 70 * SCALE_FACTOR;
+
+        client.initialize(
+            &oracle,
+            &token_address,
+            &b,
+            &String::from_str(&env, "QmTest"),
+            &initial_funding,
+        );
+
+        let user = Address::generate(&env);
+        let token_admin_client = StellarAssetClient::new(&env, &token_address);
+        token_admin_client.mint(&user, &(100 * SCALE_FACTOR));
+
+        // User buys NO tokens
+        client.buy(&user, &1, &(10 * SCALE_FACTOR), &(50 * SCALE_FACTOR));
+
+        // Resolve market with YES winning (user loses)
+        client.resolve(&oracle, &0);
+
+        // Loser tries to claim
+        client.claim(&user); // Should panic with NothingToClaim
+    }
+
+    // --- Quote validation tests ---
+
+    #[test]
+    #[should_panic(expected = "Error(Contract, #5)")] // InvalidOutcome = 5
+    fn test_get_quote_invalid_outcome() {
+        let (env, contract_id, oracle, token_address) = setup_test();
+        let client = LmsrMarketClient::new(&env, &contract_id);
+
+        let b = 100 * SCALE_FACTOR;
+        let initial_funding = 70 * SCALE_FACTOR;
+
+        client.initialize(
+            &oracle,
+            &token_address,
+            &b,
+            &String::from_str(&env, "QmTest"),
+            &initial_funding,
+        );
+
+        // Try to get quote with invalid outcome
+        client.get_quote(&99, &(10 * SCALE_FACTOR));
+    }
+
+    #[test]
+    #[should_panic(expected = "Error(Contract, #6)")] // InvalidAmount = 6
+    fn test_get_quote_zero_amount() {
+        let (env, contract_id, oracle, token_address) = setup_test();
+        let client = LmsrMarketClient::new(&env, &contract_id);
+
+        let b = 100 * SCALE_FACTOR;
+        let initial_funding = 70 * SCALE_FACTOR;
+
+        client.initialize(
+            &oracle,
+            &token_address,
+            &b,
+            &String::from_str(&env, "QmTest"),
+            &initial_funding,
+        );
+
+        // Try to get quote with zero amount
+        client.get_quote(&0, &0);
     }
 }

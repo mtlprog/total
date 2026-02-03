@@ -100,10 +100,15 @@ func (s *MarketService) BuildBuyTx(ctx context.Context, req BuyRequest) (*model.
 
 	amount := int64(req.ShareAmount * float64(soroban.ScaleFactor))
 
+	outcomeU32, err := soroban.OutcomeToU32(string(req.Outcome))
+	if err != nil {
+		return nil, fmt.Errorf("invalid outcome: %w", err)
+	}
+
 	txXDR, err := s.txBuilder.BuildBuyTx(ctx, stellar.BuyTxParams{
 		UserPublicKey: req.UserPublicKey,
 		ContractID:    req.ContractID,
-		Outcome:       soroban.OutcomeToU32(string(req.Outcome)),
+		Outcome:       outcomeU32,
 		Amount:        amount,
 		MaxCost:       maxCost,
 	})
@@ -141,10 +146,15 @@ func (s *MarketService) BuildSellTx(ctx context.Context, req SellRequest) (*mode
 
 	amount := int64(req.ShareAmount * float64(soroban.ScaleFactor))
 
+	outcomeU32, err := soroban.OutcomeToU32(string(req.Outcome))
+	if err != nil {
+		return nil, fmt.Errorf("invalid outcome: %w", err)
+	}
+
 	txXDR, err := s.txBuilder.BuildSellTx(ctx, stellar.SellTxParams{
 		UserPublicKey: req.UserPublicKey,
 		ContractID:    req.ContractID,
-		Outcome:       soroban.OutcomeToU32(string(req.Outcome)),
+		Outcome:       outcomeU32,
 		Amount:        amount,
 		MinReturn:     minReturn,
 	})
@@ -192,10 +202,15 @@ func (s *MarketService) BuildResolveTx(ctx context.Context, req ResolveRequest) 
 		return nil, err
 	}
 
+	outcomeU32, err := soroban.OutcomeToU32(string(req.WinningOutcome))
+	if err != nil {
+		return nil, fmt.Errorf("invalid outcome: %w", err)
+	}
+
 	txXDR, err := s.txBuilder.BuildResolveTx(ctx, stellar.ResolveTxParams{
 		OraclePublicKey: req.OraclePublicKey,
 		ContractID:      req.ContractID,
-		WinningOutcome:  soroban.OutcomeToU32(string(req.WinningOutcome)),
+		WinningOutcome:  outcomeU32,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to build transaction: %w", err)
@@ -268,10 +283,15 @@ type Quote struct {
 func (s *MarketService) GetQuote(ctx context.Context, contractID string, outcome model.Outcome, amount float64) (*Quote, error) {
 	amountScaled := int64(amount * float64(soroban.ScaleFactor))
 
+	outcomeU32, err := soroban.OutcomeToU32(string(outcome))
+	if err != nil {
+		return nil, fmt.Errorf("invalid outcome: %w", err)
+	}
+
 	txXDR, err := s.txBuilder.BuildGetQuoteTx(ctx, stellar.GetQuoteTxParams{
 		UserPublicKey: s.oraclePublicKey,
 		ContractID:    contractID,
-		Outcome:       soroban.OutcomeToU32(string(outcome)),
+		Outcome:       outcomeU32,
 		Amount:        amountScaled,
 	})
 	if err != nil {
@@ -299,15 +319,7 @@ func (s *MarketService) GetQuote(ctx context.Context, contractID string, outcome
 	// Contract returns tuple (cost: i128, price_after: i128)
 	tuple, err := soroban.DecodeVec(returnVal)
 	if err != nil {
-		// Try single value for backward compatibility
-		cost, err := soroban.DecodeI128(returnVal)
-		if err != nil {
-			return nil, fmt.Errorf("failed to decode quote (expected tuple or i128, got %v): %w", returnVal.Type, err)
-		}
-		return &Quote{
-			Cost:       cost,
-			PriceAfter: 0.5, // Unknown when single value
-		}, nil
+		return nil, fmt.Errorf("failed to decode quote result: expected (cost, price_after) tuple, got %v: %w", returnVal.Type, err)
 	}
 
 	if len(tuple) < 2 {

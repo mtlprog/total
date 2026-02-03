@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"math"
 	"strconv"
 
 	"github.com/stellar/go-stellar-sdk/strkey"
@@ -150,12 +151,16 @@ func (ci *ContractInvoker) SimulateAndPrepare(ctx context.Context, txXDR string)
 		SorobanData: &sorobanData,
 	}
 
-	// Update the fee to include resource fee
+	// Update the fee to include resource fee with overflow checking
 	resourceFee, err := strconv.ParseInt(simResult.MinResourceFee, 10, 64)
 	if err != nil {
 		return "", fmt.Errorf("failed to parse resource fee: %w", err)
 	}
-	tx.Fee = xdr.Uint32(int64(tx.Fee) + resourceFee)
+	newFee := int64(tx.Fee) + resourceFee
+	if newFee < 0 || newFee > math.MaxUint32 {
+		return "", fmt.Errorf("calculated fee %d overflows uint32", newFee)
+	}
+	tx.Fee = xdr.Uint32(newFee)
 
 	// Update auth if provided by simulation
 	if len(simResult.Results) > 0 && len(simResult.Results[0].Auth) > 0 {
