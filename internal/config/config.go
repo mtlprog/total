@@ -17,8 +17,8 @@ const (
 	PinataAPIURL       = "https://api.pinata.cloud/pinning/pinJSONToIPFS"
 
 	// Market configuration
-	DefaultLiquidityParam    = 100.0
-	InitialTokenSupply       = 1000000.0 // Initial supply of YES/NO tokens
-	MaxAssetCodeLength       = 12
-	MarketAccountMinReserve  = 1.5 // XLM needed for market account
+	DefaultLiquidityParam   = 100.0
+	InitialTokenSupply      = 1000000.0 // Initial supply of YES/NO tokens
+	MaxAssetCodeLength      = 12
+	MarketAccountMinReserve = 1.5 // XLM needed for market account
 )

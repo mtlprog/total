@@ -50,26 +50,26 @@ func TestPrice(t *testing.T) {
 		tolerance float64
 	}{
 		{
-			name:      "equal quantities - 50/50",
-			qYes:      0, qNo: 0,
+			name: "equal quantities - 50/50",
+			qYes: 0, qNo: 0,
 			wantYes: 0.5, wantNo: 0.5,
 			tolerance: 0.001,
 		},
 		{
-			name:      "more YES sold",
-			qYes:      50, qNo: 0,
+			name: "more YES sold",
+			qYes: 50, qNo: 0,
 			wantYes: 0.622, wantNo: 0.378,
 			tolerance: 0.01,
 		},
 		{
-			name:      "more NO sold",
-			qYes:      0, qNo: 50,
+			name: "more NO sold",
+			qYes: 0, qNo: 50,
 			wantYes: 0.378, wantNo: 0.622,
 			tolerance: 0.01,
 		},
 		{
-			name:    "negative qYes",
-			qYes:    -10, qNo: 0,
+			name: "negative qYes",
+			qYes: -10, qNo: 0,
 			wantErr: true,
 		},
 	}
@@ -115,32 +115,32 @@ func TestCalculateCost(t *testing.T) {
 		tolerance float64
 	}{
 		{
-			name:      "buy 10 YES from 50/50",
-			qYes:      0, qNo: 0,
+			name: "buy 10 YES from 50/50",
+			qYes: 0, qNo: 0,
 			amount: 10, outcome: "YES",
 			wantCost: 5.12, tolerance: 0.1,
 		},
 		{
-			name:      "buy 10 NO from 50/50",
-			qYes:      0, qNo: 0,
+			name: "buy 10 NO from 50/50",
+			qYes: 0, qNo: 0,
 			amount: 10, outcome: "NO",
 			wantCost: 5.12, tolerance: 0.1,
 		},
 		{
-			name:      "buy YES when YES is already high",
-			qYes:      100, qNo: 0,
+			name: "buy YES when YES is already high",
+			qYes: 100, qNo: 0,
 			amount: 10, outcome: "YES",
 			wantCost: 7.31, tolerance: 0.1,
 		},
 		{
-			name:    "invalid outcome",
-			qYes:    0, qNo: 0,
+			name: "invalid outcome",
+			qYes: 0, qNo: 0,
 			amount: 10, outcome: "MAYBE",
 			wantErr: true,
 		},
 		{
-			name:    "negative amount",
-			qYes:    0, qNo: 0,
+			name: "negative amount",
+			qYes: 0, qNo: 0,
 			amount: -10, outcome: "YES",
 			wantErr: true,
 		},
@@ -180,51 +180,51 @@ func TestCalculateSellReturn(t *testing.T) {
 		tolerance  float64
 	}{
 		{
-			name:       "sell 10 YES when market has 50 YES sold",
-			qYes:       50, qNo: 0,
+			name: "sell 10 YES when market has 50 YES sold",
+			qYes: 50, qNo: 0,
 			amount: 10, outcome: "YES",
 			wantReturn: 6.11, tolerance: 0.1,
 		},
 		{
-			name:       "sell 10 NO when market has 50 NO sold",
-			qYes:       0, qNo: 50,
+			name: "sell 10 NO when market has 50 NO sold",
+			qYes: 0, qNo: 50,
 			amount: 10, outcome: "NO",
 			wantReturn: 6.11, tolerance: 0.1,
 		},
 		{
-			name:       "sell all YES tokens",
-			qYes:       100, qNo: 0,
+			name: "sell all YES tokens",
+			qYes: 100, qNo: 0,
 			amount: 100, outcome: "YES",
 			wantReturn: 62.01, tolerance: 0.5, // Larger tolerance for big amounts
 		},
 		{
-			name:    "sell more than available YES",
-			qYes:    10, qNo: 0,
-			amount:  20, outcome: "YES",
+			name: "sell more than available YES",
+			qYes: 10, qNo: 0,
+			amount: 20, outcome: "YES",
 			wantErr: ErrInsufficientTokens,
 		},
 		{
-			name:    "sell more than available NO",
-			qYes:    0, qNo: 10,
-			amount:  20, outcome: "NO",
+			name: "sell more than available NO",
+			qYes: 0, qNo: 10,
+			amount: 20, outcome: "NO",
 			wantErr: ErrInsufficientTokens,
 		},
 		{
-			name:    "invalid outcome",
-			qYes:    50, qNo: 50,
-			amount:  10, outcome: "MAYBE",
+			name: "invalid outcome",
+			qYes: 50, qNo: 50,
+			amount: 10, outcome: "MAYBE",
 			wantErr: ErrInvalidOutcome,
 		},
 		{
-			name:    "negative amount",
-			qYes:    50, qNo: 50,
-			amount:  -10, outcome: "YES",
+			name: "negative amount",
+			qYes: 50, qNo: 50,
+			amount: -10, outcome: "YES",
 			wantErr: ErrNegativeAmount,
 		},
 		{
-			name:    "zero amount",
-			qYes:    50, qNo: 50,
-			amount:  0, outcome: "YES",
+			name: "zero amount",
+			qYes: 50, qNo: 50,
+			amount: 0, outcome: "YES",
 			wantErr: ErrNegativeAmount,
 		},
 	}
@@ -479,11 +479,11 @@ func TestAsymmetricMarketState(t *testing.T) {
 
 	// Test extreme asymmetric states
 	tests := []struct {
-		name    string
-		qYes    float64
-		qNo     float64
-		minYes  float64
-		maxYes  float64
+		name   string
+		qYes   float64
+		qNo    float64
+		minYes float64
+		maxYes float64
 	}{
 		{"heavy YES", 500, 0, 0.99, 1.0},
 		{"heavy NO", 0, 500, 0.0, 0.01},

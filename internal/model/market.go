@@ -16,11 +16,14 @@ var (
 	ErrInvalidLiquidityParam = errors.New("liquidity parameter must be positive")
 	ErrInvalidShareAmount    = errors.New("share amount must be positive")
 	ErrCloseTimeInPast       = errors.New("close time must be in the future")
+	ErrInvalidSlippage       = errors.New("slippage must be between 0 and 10%")
 )
 
 const (
 	MaxQuestionLength    = 500
 	MaxDescriptionLength = 2000
+	DefaultSlippage      = 0.01 // 1%
+	MaxSlippage          = 0.10 // 10%
 )
 
 // Outcome represents a market outcome (YES or NO).
@@ -159,6 +162,7 @@ type BuyRequest struct {
 }
 
 // Validate validates the buy request.
+// Note: Does not mutate the request. Slippage defaults should be set by the caller.
 func (r *BuyRequest) Validate() error {
 	if err := ValidateStellarPublicKey(r.UserPublicKey); err != nil {
 		return err
@@ -172,9 +176,9 @@ func (r *BuyRequest) Validate() error {
 	if r.ShareAmount <= 0 {
 		return ErrInvalidShareAmount
 	}
-	// Default slippage to 1% if not set
-	if r.Slippage <= 0 {
-		r.Slippage = 0.01
+	// Slippage validation - must be set by caller (0 is invalid)
+	if r.Slippage <= 0 || r.Slippage > MaxSlippage {
+		return ErrInvalidSlippage
 	}
 	return nil
 }

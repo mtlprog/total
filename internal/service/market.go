@@ -19,10 +19,10 @@ import (
 )
 
 var (
-	ErrMarketNotFound   = errors.New("market not found")
-	ErrMarketResolved   = errors.New("market already resolved")
-	ErrInvalidOutcome   = errors.New("invalid outcome")
-	ErrInsufficientCost = errors.New("insufficient cost provided")
+	ErrMarketNotFound    = errors.New("market not found")
+	ErrMarketResolved    = errors.New("market already resolved")
+	ErrInvalidOutcome    = errors.New("invalid outcome")
+	ErrInsufficientCost  = errors.New("insufficient cost provided")
 	ErrIPFSNotConfigured = errors.New("IPFS client not configured")
 	ErrInvalidMarketData = errors.New("invalid market data")
 )
@@ -64,26 +64,38 @@ func (s *MarketService) GetMarket(ctx context.Context, marketID string) (*model.
 	}
 
 	// Decode data entries
+	// Non-critical fields: log and continue
 	ipfsHash, err := decodeData(data["ipfs"])
 	if err != nil {
 		s.logger.Warn("failed to decode ipfs hash", "marketID", marketID, "error", err)
 	}
 
+	// Critical fields: return error if decoding fails or empty
 	bParam, err := decodeData(data["b"])
 	if err != nil {
-		s.logger.Warn("failed to decode liquidity param", "marketID", marketID, "error", err)
+		return nil, fmt.Errorf("market %s has invalid liquidity param: %w", marketID, err)
+	}
+	if bParam == "" {
+		return nil, fmt.Errorf("%w: market %s is missing liquidity param", ErrInvalidMarketData, marketID)
 	}
 
 	yesCode, err := decodeData(data["yes"])
 	if err != nil {
-		s.logger.Warn("failed to decode yes asset code", "marketID", marketID, "error", err)
+		return nil, fmt.Errorf("market %s has invalid YES asset code: %w", marketID, err)
+	}
+	if yesCode == "" {
+		return nil, fmt.Errorf("%w: market %s is missing YES asset code", ErrInvalidMarketData, marketID)
 	}
 
 	noCode, err := decodeData(data["no"])
 	if err != nil {
-		s.logger.Warn("failed to decode no asset code", "marketID", marketID, "error", err)
+		return nil, fmt.Errorf("market %s has invalid NO asset code: %w", marketID, err)
+	}
+	if noCode == "" {
+		return nil, fmt.Errorf("%w: market %s is missing NO asset code", ErrInvalidMarketData, marketID)
 	}
 
+	// Non-critical: resolution may not exist yet
 	resolutionStr, err := decodeData(data["resolution"])
 	if err != nil {
 		s.logger.Warn("failed to decode resolution", "marketID", marketID, "error", err)
@@ -98,11 +110,13 @@ func (s *MarketService) GetMarket(ctx context.Context, marketID string) (*model.
 		}
 	}
 
-	// Parse liquidity parameter
+	// Parse liquidity parameter (already validated non-empty above)
 	liquidityParam, err := strconv.ParseFloat(bParam, 64)
-	if err != nil || liquidityParam <= 0 {
-		s.logger.Warn("invalid liquidity param, using default", "marketID", marketID, "bParam", bParam)
-		liquidityParam = config.DefaultLiquidityParam
+	if err != nil {
+		return nil, fmt.Errorf("market %s has invalid liquidity param value: %w", marketID, err)
+	}
+	if liquidityParam <= 0 {
+		return nil, fmt.Errorf("%w: market %s has non-positive liquidity param: %f", ErrInvalidMarketData, marketID, liquidityParam)
 	}
 
 	// Get balances to calculate tokens sold
@@ -172,18 +186,24 @@ func (s *MarketService) GetMarket(ctx context.Context, marketID string) (*model.
 
 // ListMarketsResult contains the result of listing markets.
 type ListMarketsResult struct {
-	Markets      []*model.Market
-	FailedCount  int
-	FailedIDs    []string
+	Markets     []*model.Market
+	FailedCount int
+	FailedIDs   []string
 }
 
 // ListMarkets returns all markets created by the oracle.
 // Returns partial results if some markets fail to load.
+// Returns an error if all markets fail to load or context is cancelled.
 func (s *MarketService) ListMarkets(ctx context.Context, marketIDs []string) ([]*model.Market, error) {
 	var markets []*model.Market
 	var failedIDs []string
 
 	for _, id := range marketIDs {
+		// Check context cancellation early
+		if err := ctx.Err(); err != nil {
+			return nil, fmt.Errorf("context cancelled while listing markets: %w", err)
+		}
+
 		market, err := s.GetMarket(ctx, id)
 		if err != nil {
 			s.logger.Warn("failed to get market", "id", id, "error", err)
@@ -193,9 +213,10 @@ func (s *MarketService) ListMarkets(ctx context.Context, marketIDs []string) ([]
 		markets = append(markets, market)
 	}
 
-	// Log if all markets failed
+	// Return error if all markets failed
 	if len(marketIDs) > 0 && len(markets) == 0 {
 		s.logger.Error("all markets failed to load", "total", len(marketIDs), "failed", failedIDs)
+		return nil, fmt.Errorf("all %d markets failed to load", len(marketIDs))
 	} else if len(failedIDs) > 0 {
 		s.logger.Warn("some markets failed to load", "total", len(marketIDs), "failed", len(failedIDs))
 	}
