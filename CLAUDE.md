@@ -77,3 +77,13 @@ internal/
 - XDR transactions require external signing (Stellar Lab, Freighter, etc.)
 - Market accounts use multisig: oracle added as signer via SetOptions, master key disabled
 - Outcome tokens (YES/NO) issued by market account, oracle signs payment operations
+- Use `errors.Is()` not `==` for error comparison (errors may be wrapped with `%w`)
+- Validate() methods must not mutate receivers (set defaults in caller before validation)
+- Parse user-provided times as UTC for consistent timezone handling
+- Critical Stellar account fields (yes/no codes, liquidity) must error on decode failure, not log and continue
+
+## Testing
+
+- Test files use table-driven tests with `tests := []struct{...}`
+- Run single package: `go test ./internal/model/...`
+- Validation tests should cover: valid input, boundary values, empty/whitespace, malformed data
