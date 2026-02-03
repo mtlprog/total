@@ -75,3 +75,5 @@ internal/
 - Stellar SDK moved from `stellar/go` to `stellar/go-stellar-sdk` (Dec 2025)
 - Market accounts are sponsored by oracle (no XLM reserve needed for users)
 - XDR transactions require external signing (Stellar Lab, Freighter, etc.)
+- Market accounts use multisig: oracle added as signer via SetOptions, master key disabled
+- Outcome tokens (YES/NO) issued by market account, oracle signs payment operations
