@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/mtlprog/total/internal/config"
-	"github.com/mtlprog/total/internal/lmsr"
 	"github.com/mtlprog/total/internal/model"
 	"github.com/mtlprog/total/internal/soroban"
 	"github.com/mtlprog/total/internal/stellar"
@@ -46,8 +44,8 @@ func NewMarketService(
 	}
 }
 
-// BuyRequest contains data for buying outcome tokens.
-type BuyRequest struct {
+// TradeRequest contains common fields for buy/sell operations.
+type TradeRequest struct {
 	UserPublicKey string
 	ContractID    string
 	Outcome       model.Outcome
@@ -55,8 +53,8 @@ type BuyRequest struct {
 	Slippage      float64
 }
 
-// Validate validates the buy request.
-func (r *BuyRequest) Validate() error {
+// Validate validates the trade request fields.
+func (r *TradeRequest) Validate() error {
 	if err := model.ValidateStellarPublicKey(r.UserPublicKey); err != nil {
 		return err
 	}
@@ -75,6 +73,16 @@ func (r *BuyRequest) Validate() error {
 	return nil
 }
 
+// BuyRequest contains data for buying outcome tokens.
+type BuyRequest struct {
+	TradeRequest
+}
+
+// SellRequest contains data for selling tokens.
+type SellRequest struct {
+	TradeRequest
+}
+
 // BuildBuyTx builds a transaction for buying tokens.
 func (s *MarketService) BuildBuyTx(ctx context.Context, req BuyRequest) (*model.TransactionResult, error) {
 	if err := req.Validate(); err != nil {
@@ -90,19 +98,12 @@ func (s *MarketService) BuildBuyTx(ctx context.Context, req BuyRequest) (*model.
 	// Apply slippage
 	maxCost := int64(float64(quote.Cost) * (1 + req.Slippage))
 
-	var outcome uint32
-	if req.Outcome == model.OutcomeYes {
-		outcome = soroban.OutcomeYes
-	} else {
-		outcome = soroban.OutcomeNo
-	}
-
 	amount := int64(req.ShareAmount * float64(soroban.ScaleFactor))
 
 	txXDR, err := s.txBuilder.BuildBuyTx(ctx, stellar.BuyTxParams{
 		UserPublicKey: req.UserPublicKey,
 		ContractID:    req.ContractID,
-		Outcome:       outcome,
+		Outcome:       soroban.OutcomeToU32(string(req.Outcome)),
 		Amount:        amount,
 		MaxCost:       maxCost,
 	})
@@ -123,35 +124,6 @@ func (s *MarketService) BuildBuyTx(ctx context.Context, req BuyRequest) (*model.
 	}, nil
 }
 
-// SellRequest contains data for selling tokens.
-type SellRequest struct {
-	UserPublicKey string
-	ContractID    string
-	Outcome       model.Outcome
-	ShareAmount   float64
-	Slippage      float64
-}
-
-// Validate validates the sell request.
-func (r *SellRequest) Validate() error {
-	if err := model.ValidateStellarPublicKey(r.UserPublicKey); err != nil {
-		return err
-	}
-	if r.ContractID == "" {
-		return fmt.Errorf("contract ID is required")
-	}
-	if !r.Outcome.IsValid() {
-		return model.ErrInvalidOutcome
-	}
-	if r.ShareAmount <= 0 {
-		return model.ErrInvalidShareAmount
-	}
-	if r.Slippage <= 0 || r.Slippage > model.MaxSlippage {
-		return model.ErrInvalidSlippage
-	}
-	return nil
-}
-
 // BuildSellTx builds a transaction for selling tokens.
 func (s *MarketService) BuildSellTx(ctx context.Context, req SellRequest) (*model.TransactionResult, error) {
 	if err := req.Validate(); err != nil {
@@ -167,19 +139,12 @@ func (s *MarketService) BuildSellTx(ctx context.Context, req SellRequest) (*mode
 	// Apply slippage (inverse)
 	minReturn := int64(float64(quote.Cost) * (1 - req.Slippage))
 
-	var outcome uint32
-	if req.Outcome == model.OutcomeYes {
-		outcome = soroban.OutcomeYes
-	} else {
-		outcome = soroban.OutcomeNo
-	}
-
 	amount := int64(req.ShareAmount * float64(soroban.ScaleFactor))
 
 	txXDR, err := s.txBuilder.BuildSellTx(ctx, stellar.SellTxParams{
 		UserPublicKey: req.UserPublicKey,
 		ContractID:    req.ContractID,
-		Outcome:       outcome,
+		Outcome:       soroban.OutcomeToU32(string(req.Outcome)),
 		Amount:        amount,
 		MinReturn:     minReturn,
 	})
@@ -227,17 +192,10 @@ func (s *MarketService) BuildResolveTx(ctx context.Context, req ResolveRequest) 
 		return nil, err
 	}
 
-	var outcome uint32
-	if req.WinningOutcome == model.OutcomeYes {
-		outcome = soroban.OutcomeYes
-	} else {
-		outcome = soroban.OutcomeNo
-	}
-
 	txXDR, err := s.txBuilder.BuildResolveTx(ctx, stellar.ResolveTxParams{
 		OraclePublicKey: req.OraclePublicKey,
 		ContractID:      req.ContractID,
-		WinningOutcome:  outcome,
+		WinningOutcome:  soroban.OutcomeToU32(string(req.WinningOutcome)),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to build transaction: %w", err)
@@ -308,19 +266,12 @@ type Quote struct {
 
 // GetQuote gets a price quote from a market contract.
 func (s *MarketService) GetQuote(ctx context.Context, contractID string, outcome model.Outcome, amount float64) (*Quote, error) {
-	var outcomeU32 uint32
-	if outcome == model.OutcomeYes {
-		outcomeU32 = soroban.OutcomeYes
-	} else {
-		outcomeU32 = soroban.OutcomeNo
-	}
-
 	amountScaled := int64(amount * float64(soroban.ScaleFactor))
 
 	txXDR, err := s.txBuilder.BuildGetQuoteTx(ctx, stellar.GetQuoteTxParams{
 		UserPublicKey: s.oraclePublicKey,
 		ContractID:    contractID,
-		Outcome:       outcomeU32,
+		Outcome:       soroban.OutcomeToU32(string(outcome)),
 		Amount:        amountScaled,
 	})
 	if err != nil {
@@ -345,36 +296,39 @@ func (s *MarketService) GetQuote(ctx context.Context, contractID string, outcome
 		return nil, fmt.Errorf("failed to parse return value: %w", err)
 	}
 
-	cost, err := soroban.DecodeI128(returnVal)
+	// Contract returns tuple (cost: i128, price_after: i128)
+	tuple, err := soroban.DecodeVec(returnVal)
 	if err != nil {
-		// Fall back to local LMSR calculation
-		s.logger.Warn("failed to decode quote, using local estimate", "error", err)
-		return s.getLocalQuote(amount, outcome)
+		// Try single value for backward compatibility
+		cost, err := soroban.DecodeI128(returnVal)
+		if err != nil {
+			return nil, fmt.Errorf("failed to decode quote (expected tuple or i128, got %v): %w", returnVal.Type, err)
+		}
+		return &Quote{
+			Cost:       cost,
+			PriceAfter: 0.5, // Unknown when single value
+		}, nil
 	}
+
+	if len(tuple) < 2 {
+		return nil, fmt.Errorf("expected tuple of 2 elements, got %d", len(tuple))
+	}
+
+	cost, err := soroban.DecodeI128(tuple[0])
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode cost from tuple: %w", err)
+	}
+
+	priceAfterScaled, err := soroban.DecodeI128(tuple[1])
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode price_after from tuple: %w", err)
+	}
+
+	// Convert price_after from scaled i128 to float64 (0-1)
+	priceAfter := float64(priceAfterScaled) / float64(soroban.ScaleFactor)
 
 	return &Quote{
 		Cost:       cost,
-		PriceAfter: 0.5,
-	}, nil
-}
-
-// getLocalQuote calculates a quote locally using LMSR.
-func (s *MarketService) getLocalQuote(amount float64, outcome model.Outcome) (*Quote, error) {
-	calc, err := lmsr.New(config.DefaultLiquidityParam)
-	if err != nil {
-		return nil, fmt.Errorf("invalid liquidity parameter: %w", err)
-	}
-
-	// Assume equilibrium for initial estimate
-	cost, _, _, err := calc.Quote(0, 0, amount, outcome.String())
-	if err != nil {
-		return nil, fmt.Errorf("failed to calculate quote: %w", err)
-	}
-
-	costScaled := int64(cost * float64(soroban.ScaleFactor))
-
-	return &Quote{
-		Cost:       costScaled,
-		PriceAfter: 0.5,
+		PriceAfter: priceAfter,
 	}, nil
 }

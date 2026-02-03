@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sync/atomic"
 	"time"
 )
 
@@ -23,18 +24,19 @@ var (
 type Client struct {
 	rpcURL     string
 	httpClient *http.Client
-	requestID  int
+	requestID  atomic.Int64
 }
 
 // NewClient creates a new Soroban RPC client.
 func NewClient(rpcURL string) *Client {
-	return &Client{
+	c := &Client{
 		rpcURL: rpcURL,
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
-		requestID: 1,
 	}
+	c.requestID.Store(1)
+	return c
 }
 
 // RPCURL returns the RPC URL.
@@ -44,11 +46,11 @@ func (c *Client) RPCURL() string {
 
 // call makes a JSON-RPC call.
 func (c *Client) call(ctx context.Context, method string, params any) (*RPCResponse, error) {
-	c.requestID++
+	id := c.requestID.Add(1)
 
 	req := RPCRequest{
 		JSONRPC: "2.0",
-		ID:      c.requestID,
+		ID:      int(id),
 		Method:  method,
 		Params:  params,
 	}

@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -12,6 +13,7 @@ import (
 	"github.com/mtlprog/total/internal/lmsr"
 	"github.com/mtlprog/total/internal/model"
 	"github.com/mtlprog/total/internal/service"
+	"github.com/mtlprog/total/internal/soroban"
 	"github.com/mtlprog/total/internal/template"
 	"github.com/stellar/go-stellar-sdk/keypair"
 )
@@ -120,8 +122,7 @@ func (h *MarketHandler) handleGetQuote(w http.ResponseWriter, r *http.Request) {
 
 	quote, err := h.marketService.GetQuote(r.Context(), contractID, outcome, amount)
 	if err != nil {
-		h.logger.Error("failed to get quote", "error", err)
-		http.Error(w, userFriendlyError(err), http.StatusBadRequest)
+		h.writeError(w, err, "contract_id", contractID, "outcome", outcome, "amount", amount)
 		return
 	}
 
@@ -184,17 +185,18 @@ func (h *MarketHandler) handleBuildBuyTx(w http.ResponseWriter, r *http.Request)
 	}
 
 	req := service.BuyRequest{
-		UserPublicKey: userPubKey,
-		ContractID:    contractID,
-		Outcome:       outcome,
-		ShareAmount:   amount,
-		Slippage:      slippage,
+		TradeRequest: service.TradeRequest{
+			UserPublicKey: userPubKey,
+			ContractID:    contractID,
+			Outcome:       outcome,
+			ShareAmount:   amount,
+			Slippage:      slippage,
+		},
 	}
 
 	result, err := h.marketService.BuildBuyTx(r.Context(), req)
 	if err != nil {
-		h.logger.Error("failed to build buy tx", "error", err)
-		http.Error(w, userFriendlyError(err), http.StatusBadRequest)
+		h.writeError(w, err, "contract_id", contractID, "outcome", outcome, "amount", amount)
 		return
 	}
 
@@ -257,17 +259,18 @@ func (h *MarketHandler) handleBuildSellTx(w http.ResponseWriter, r *http.Request
 	}
 
 	req := service.SellRequest{
-		UserPublicKey: userPubKey,
-		ContractID:    contractID,
-		Outcome:       outcome,
-		ShareAmount:   amount,
-		Slippage:      slippage,
+		TradeRequest: service.TradeRequest{
+			UserPublicKey: userPubKey,
+			ContractID:    contractID,
+			Outcome:       outcome,
+			ShareAmount:   amount,
+			Slippage:      slippage,
+		},
 	}
 
 	result, err := h.marketService.BuildSellTx(r.Context(), req)
 	if err != nil {
-		h.logger.Error("failed to build sell tx", "error", err)
-		http.Error(w, userFriendlyError(err), http.StatusBadRequest)
+		h.writeError(w, err, "contract_id", contractID, "outcome", outcome, "amount", amount)
 		return
 	}
 
@@ -307,8 +310,7 @@ func (h *MarketHandler) handleResolveMarket(w http.ResponseWriter, r *http.Reque
 
 	result, err := h.marketService.BuildResolveTx(r.Context(), req)
 	if err != nil {
-		h.logger.Error("failed to resolve market", "error", err)
-		http.Error(w, userFriendlyError(err), http.StatusBadRequest)
+		h.writeError(w, err, "contract_id", contractID, "outcome", outcome)
 		return
 	}
 
@@ -346,8 +348,7 @@ func (h *MarketHandler) handleBuildClaimTx(w http.ResponseWriter, r *http.Reques
 
 	result, err := h.marketService.BuildClaimTx(r.Context(), req)
 	if err != nil {
-		h.logger.Error("failed to build claim tx", "error", err)
-		http.Error(w, userFriendlyError(err), http.StatusBadRequest)
+		h.writeError(w, err, "contract_id", contractID, "user_public_key", userPubKey)
 		return
 	}
 
@@ -384,44 +385,82 @@ func (h *MarketHandler) SetMarketIDs(ids []string) {
 	copy(h.contractIDs, ids)
 }
 
-// userFriendlyError converts internal errors to user-friendly messages.
+// errorResponse contains both message and status code for an error.
+type errorResponse struct {
+	Message string
+	Status  int
+}
+
+// mapError maps internal errors to user-friendly messages and HTTP status codes.
 // Uses errors.Is() to properly match wrapped errors.
-func userFriendlyError(err error) string {
+func mapError(err error) errorResponse {
 	switch {
+	// Not found errors -> 404
 	case errors.Is(err, service.ErrMarketNotFound):
-		return "Market not found"
+		return errorResponse{"Market not found", http.StatusNotFound}
+
+	// Business logic errors -> 409 Conflict
 	case errors.Is(err, service.ErrMarketResolved):
-		return "Market has already been resolved"
+		return errorResponse{"Market has already been resolved", http.StatusConflict}
+
+	// Validation errors -> 400 Bad Request
 	case errors.Is(err, service.ErrInvalidOutcome):
-		return "Invalid outcome: must be YES or NO"
+		return errorResponse{"Invalid outcome: must be YES or NO", http.StatusBadRequest}
 	case errors.Is(err, model.ErrEmptyQuestion):
-		return "Question is required"
+		return errorResponse{"Question is required", http.StatusBadRequest}
 	case errors.Is(err, model.ErrQuestionTooLong):
-		return fmt.Sprintf("Question exceeds maximum length (%d characters)", model.MaxQuestionLength)
+		return errorResponse{fmt.Sprintf("Question exceeds maximum length (%d characters)", model.MaxQuestionLength), http.StatusBadRequest}
 	case errors.Is(err, model.ErrDescriptionTooLong):
-		return fmt.Sprintf("Description exceeds maximum length (%d characters)", model.MaxDescriptionLength)
+		return errorResponse{fmt.Sprintf("Description exceeds maximum length (%d characters)", model.MaxDescriptionLength), http.StatusBadRequest}
 	case errors.Is(err, model.ErrInvalidLiquidityParam):
-		return "Liquidity parameter must be a positive number"
+		return errorResponse{"Liquidity parameter must be a positive number", http.StatusBadRequest}
 	case errors.Is(err, model.ErrInvalidShareAmount):
-		return "Share amount must be a positive number"
+		return errorResponse{"Share amount must be a positive number", http.StatusBadRequest}
 	case errors.Is(err, model.ErrCloseTimeInPast):
-		return "Close time must be in the future"
+		return errorResponse{"Close time must be in the future", http.StatusBadRequest}
 	case errors.Is(err, model.ErrInvalidPublicKey):
-		return "Invalid Stellar public key format"
+		return errorResponse{"Invalid Stellar public key format", http.StatusBadRequest}
 	case errors.Is(err, model.ErrInvalidSlippage):
-		return fmt.Sprintf("Slippage must be between 0 and %.0f%%", model.MaxSlippage*100)
-	// LMSR errors
+		return errorResponse{fmt.Sprintf("Slippage must be between 0 and %.0f%%", model.MaxSlippage*100), http.StatusBadRequest}
+
+	// LMSR errors -> 400 Bad Request
 	case errors.Is(err, lmsr.ErrInvalidOutcome):
-		return "Invalid outcome: must be YES or NO"
+		return errorResponse{"Invalid outcome: must be YES or NO", http.StatusBadRequest}
 	case errors.Is(err, lmsr.ErrNegativeAmount):
-		return "Amount must be positive"
+		return errorResponse{"Amount must be positive", http.StatusBadRequest}
 	case errors.Is(err, lmsr.ErrInsufficientTokens):
-		return "Insufficient tokens available"
+		return errorResponse{"Insufficient tokens available", http.StatusBadRequest}
 	case errors.Is(err, lmsr.ErrNegativeQuantities):
-		return "Invalid market state: negative quantities"
+		return errorResponse{"Invalid market state: negative quantities", http.StatusBadRequest}
 	case errors.Is(err, lmsr.ErrInvalidLiquidity):
-		return "Invalid liquidity parameter"
+		return errorResponse{"Invalid liquidity parameter", http.StatusBadRequest}
+
+	// Soroban RPC errors -> 502 Bad Gateway
+	case errors.Is(err, soroban.ErrRPCError):
+		return errorResponse{"Failed to communicate with the blockchain. Please try again later.", http.StatusBadGateway}
+	case errors.Is(err, soroban.ErrSimulationFailed):
+		return errorResponse{"Transaction simulation failed. Your parameters may be invalid.", http.StatusBadRequest}
+	case errors.Is(err, soroban.ErrTransactionFailed):
+		return errorResponse{"Transaction failed. Please check your parameters and try again.", http.StatusBadRequest}
+	case errors.Is(err, soroban.ErrTimeout):
+		return errorResponse{"Request timed out. Please try again.", http.StatusGatewayTimeout}
+
+	// Context errors -> appropriate status
+	case errors.Is(err, context.DeadlineExceeded):
+		return errorResponse{"Request timed out. Please try again.", http.StatusGatewayTimeout}
+	case errors.Is(err, context.Canceled):
+		return errorResponse{"Request was cancelled.", http.StatusBadRequest}
+
+	// Unknown errors -> 500 Internal Server Error
 	default:
-		return "An error occurred. Please try again."
+		return errorResponse{"An unexpected error occurred. Please try again later.", http.StatusInternalServerError}
 	}
+}
+
+// writeError writes an error response with appropriate status code.
+func (h *MarketHandler) writeError(w http.ResponseWriter, err error, logContext ...any) {
+	resp := mapError(err)
+	logArgs := append([]any{"error", err, "status", resp.Status}, logContext...)
+	h.logger.Error("request failed", logArgs...)
+	http.Error(w, resp.Message, resp.Status)
 }

@@ -185,3 +185,21 @@ const (
 
 // ScaleFactor for fixed-point arithmetic (10^7 like Stellar).
 const ScaleFactor int64 = 10_000_000
+
+// OutcomeToU32 converts a string outcome ("YES"/"NO") to contract u32 format.
+// Returns OutcomeYes (0) for "YES", OutcomeNo (1) for "NO".
+func OutcomeToU32(outcome string) uint32 {
+	if outcome == "YES" {
+		return OutcomeYes
+	}
+	return OutcomeNo
+}
+
+// U32ToOutcome converts a contract u32 outcome to string format.
+// Returns "YES" for 0, "NO" for all other values.
+func U32ToOutcome(outcome uint32) string {
+	if outcome == OutcomeYes {
+		return "YES"
+	}
+	return "NO"
+}
