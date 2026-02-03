@@ -115,7 +115,10 @@ func runServe(c *cli.Context) error {
 	marketIDs := c.StringSlice("market-ids")
 
 	// Initialize Stellar client
-	stellarClient := stellar.NewHorizonClient(horizonURL, networkPassphrase)
+	stellarClient, err := stellar.NewHorizonClient(horizonURL, networkPassphrase)
+	if err != nil {
+		return fmt.Errorf("failed to create Stellar client: %w", err)
+	}
 
 	// Initialize transaction builder
 	txBuilder, err := stellar.NewBuilder(stellarClient, networkPassphrase, config.DefaultBaseFee, oracleSecretKey)

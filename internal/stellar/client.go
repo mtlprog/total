@@ -18,6 +18,8 @@ var (
 	ErrInsufficientBalance = errors.New("insufficient balance")
 	ErrNetworkTimeout      = errors.New("stellar network timeout")
 	ErrInvalidTransaction  = errors.New("invalid transaction")
+	ErrEmptyHorizonURL     = errors.New("horizon URL is required")
+	ErrEmptyPassphrase     = errors.New("network passphrase is required")
 )
 
 // Client provides read operations for Stellar Horizon API.
@@ -51,7 +53,14 @@ type HorizonClient struct {
 }
 
 // NewHorizonClient creates a new Horizon client.
-func NewHorizonClient(horizonURL, networkPassphrase string) *HorizonClient {
+// Returns an error if required parameters are empty.
+func NewHorizonClient(horizonURL, networkPassphrase string) (*HorizonClient, error) {
+	if horizonURL == "" {
+		return nil, ErrEmptyHorizonURL
+	}
+	if networkPassphrase == "" {
+		return nil, ErrEmptyPassphrase
+	}
 	return &HorizonClient{
 		client: &horizonclient.Client{
 			HorizonURL: horizonURL,
@@ -60,11 +69,16 @@ func NewHorizonClient(horizonURL, networkPassphrase string) *HorizonClient {
 			},
 		},
 		networkPassphrase: networkPassphrase,
-	}
+	}, nil
 }
 
 // GetAccount implements Client.
 func (c *HorizonClient) GetAccount(ctx context.Context, publicKey string) (*horizon.Account, error) {
+	// Check context before making request
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("context error: %w", err)
+	}
+
 	account, err := c.client.AccountDetail(horizonclient.AccountRequest{
 		AccountID: publicKey,
 	})
@@ -97,6 +111,11 @@ func (c *HorizonClient) GetAccountData(ctx context.Context, publicKey string) (m
 
 // GetTransactions implements Client.
 func (c *HorizonClient) GetTransactions(ctx context.Context, publicKey string, limit int) ([]horizon.Transaction, error) {
+	// Check context before making request
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("context error: %w", err)
+	}
+
 	request := horizonclient.TransactionRequest{
 		ForAccount: publicKey,
 		Limit:      uint(limit),
@@ -113,6 +132,11 @@ func (c *HorizonClient) GetTransactions(ctx context.Context, publicKey string, l
 
 // GetOperations implements Client.
 func (c *HorizonClient) GetOperations(ctx context.Context, publicKey string, limit int) ([]operations.Operation, error) {
+	// Check context before making request
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("context error: %w", err)
+	}
+
 	request := horizonclient.OperationRequest{
 		ForAccount: publicKey,
 		Limit:      uint(limit),

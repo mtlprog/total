@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"strconv"
 	"time"
 
@@ -22,15 +23,17 @@ var (
 	ErrMarketResolved   = errors.New("market already resolved")
 	ErrInvalidOutcome   = errors.New("invalid outcome")
 	ErrInsufficientCost = errors.New("insufficient cost provided")
+	ErrIPFSNotConfigured = errors.New("IPFS client not configured")
+	ErrInvalidMarketData = errors.New("invalid market data")
 )
 
 // MarketService handles prediction market operations.
 type MarketService struct {
-	stellarClient  stellar.Client
-	txBuilder      *stellar.Builder
-	ipfsClient     *ipfs.Client
+	stellarClient   stellar.Client
+	txBuilder       *stellar.Builder
+	ipfsClient      *ipfs.Client
 	oraclePublicKey string
-	logger         *slog.Logger
+	logger          *slog.Logger
 }
 
 // NewMarketService creates a new market service.
@@ -42,11 +45,11 @@ func NewMarketService(
 	logger *slog.Logger,
 ) *MarketService {
 	return &MarketService{
-		stellarClient:  stellarClient,
-		txBuilder:      txBuilder,
-		ipfsClient:     ipfsClient,
+		stellarClient:   stellarClient,
+		txBuilder:       txBuilder,
+		ipfsClient:      ipfsClient,
 		oraclePublicKey: oraclePublicKey,
-		logger:         logger,
+		logger:          logger,
 	}
 }
 
@@ -61,15 +64,44 @@ func (s *MarketService) GetMarket(ctx context.Context, marketID string) (*model.
 	}
 
 	// Decode data entries
-	ipfsHash := decodeData(data["ipfs"])
-	bParam := decodeData(data["b"])
-	yesCode := decodeData(data["yes"])
-	noCode := decodeData(data["no"])
-	resolution := decodeData(data["resolution"])
+	ipfsHash, err := decodeData(data["ipfs"])
+	if err != nil {
+		s.logger.Warn("failed to decode ipfs hash", "marketID", marketID, "error", err)
+	}
+
+	bParam, err := decodeData(data["b"])
+	if err != nil {
+		s.logger.Warn("failed to decode liquidity param", "marketID", marketID, "error", err)
+	}
+
+	yesCode, err := decodeData(data["yes"])
+	if err != nil {
+		s.logger.Warn("failed to decode yes asset code", "marketID", marketID, "error", err)
+	}
+
+	noCode, err := decodeData(data["no"])
+	if err != nil {
+		s.logger.Warn("failed to decode no asset code", "marketID", marketID, "error", err)
+	}
+
+	resolutionStr, err := decodeData(data["resolution"])
+	if err != nil {
+		s.logger.Warn("failed to decode resolution", "marketID", marketID, "error", err)
+	}
+
+	// Parse resolution to Outcome type
+	var resolution model.Outcome
+	if resolutionStr != "" {
+		resolution, err = model.ParseOutcome(resolutionStr)
+		if err != nil {
+			s.logger.Warn("invalid resolution value", "marketID", marketID, "resolution", resolutionStr)
+		}
+	}
 
 	// Parse liquidity parameter
-	liquidityParam, _ := strconv.ParseFloat(bParam, 64)
-	if liquidityParam <= 0 {
+	liquidityParam, err := strconv.ParseFloat(bParam, 64)
+	if err != nil || liquidityParam <= 0 {
+		s.logger.Warn("invalid liquidity param, using default", "marketID", marketID, "bParam", bParam)
 		liquidityParam = config.DefaultLiquidityParam
 	}
 
@@ -82,22 +114,37 @@ func (s *MarketService) GetMarket(ctx context.Context, marketID string) (*model.
 	var yesSold, noSold float64
 	for _, b := range balances {
 		if b.Asset.Code == yesCode {
-			balance, _ := strconv.ParseFloat(b.Balance, 64)
-			yesSold = config.InitialTokenSupply - balance
+			balance, parseErr := strconv.ParseFloat(b.Balance, 64)
+			if parseErr != nil {
+				s.logger.Warn("failed to parse YES balance", "balance", b.Balance, "error", parseErr)
+				continue
+			}
+			yesSold = math.Max(0, config.InitialTokenSupply-balance)
 		}
 		if b.Asset.Code == noCode {
-			balance, _ := strconv.ParseFloat(b.Balance, 64)
-			noSold = config.InitialTokenSupply - balance
+			balance, parseErr := strconv.ParseFloat(b.Balance, 64)
+			if parseErr != nil {
+				s.logger.Warn("failed to parse NO balance", "balance", b.Balance, "error", parseErr)
+				continue
+			}
+			noSold = math.Max(0, config.InitialTokenSupply-balance)
 		}
 	}
 
 	// Calculate current prices using LMSR
-	calc, _ := lmsr.New(liquidityParam)
-	priceYes, priceNo, _ := calc.Price(yesSold, noSold)
+	calc, err := lmsr.New(liquidityParam)
+	if err != nil {
+		return nil, fmt.Errorf("invalid liquidity parameter: %w", err)
+	}
+
+	priceYes, priceNo, err := calc.Price(yesSold, noSold)
+	if err != nil {
+		return nil, fmt.Errorf("failed to calculate prices: %w", err)
+	}
 
 	// Fetch metadata from IPFS
 	var metadata model.MarketMetadata
-	if ipfsHash != "" {
+	if ipfsHash != "" && s.ipfsClient != nil {
 		if err := s.ipfsClient.GetJSON(ctx, ipfsHash, &metadata); err != nil {
 			s.logger.Warn("failed to fetch market metadata", "hash", ipfsHash, "error", err)
 		}
@@ -123,25 +170,42 @@ func (s *MarketService) GetMarket(ctx context.Context, marketID string) (*model.
 	return market, nil
 }
 
+// ListMarketsResult contains the result of listing markets.
+type ListMarketsResult struct {
+	Markets      []*model.Market
+	FailedCount  int
+	FailedIDs    []string
+}
+
 // ListMarkets returns all markets created by the oracle.
-// Note: In a real implementation, this would query Horizon for accounts
-// created by the oracle. For now, we need to track market IDs externally.
+// Returns partial results if some markets fail to load.
 func (s *MarketService) ListMarkets(ctx context.Context, marketIDs []string) ([]*model.Market, error) {
 	var markets []*model.Market
+	var failedIDs []string
+
 	for _, id := range marketIDs {
 		market, err := s.GetMarket(ctx, id)
 		if err != nil {
 			s.logger.Warn("failed to get market", "id", id, "error", err)
+			failedIDs = append(failedIDs, id)
 			continue
 		}
 		markets = append(markets, market)
 	}
+
+	// Log if all markets failed
+	if len(marketIDs) > 0 && len(markets) == 0 {
+		s.logger.Error("all markets failed to load", "total", len(marketIDs), "failed", failedIDs)
+	} else if len(failedIDs) > 0 {
+		s.logger.Warn("some markets failed to load", "total", len(marketIDs), "failed", len(failedIDs))
+	}
+
 	return markets, nil
 }
 
 // GetQuote calculates a price quote for buying outcome tokens.
-func (s *MarketService) GetQuote(ctx context.Context, marketID, outcome string, amount float64) (*model.PriceQuote, error) {
-	if outcome != "YES" && outcome != "NO" {
+func (s *MarketService) GetQuote(ctx context.Context, marketID string, outcome model.Outcome, amount float64) (*model.PriceQuote, error) {
+	if !outcome.IsValid() {
 		return nil, ErrInvalidOutcome
 	}
 
@@ -154,8 +218,12 @@ func (s *MarketService) GetQuote(ctx context.Context, marketID, outcome string, 
 		return nil, ErrMarketResolved
 	}
 
-	calc, _ := lmsr.New(market.LiquidityParam)
-	cost, pricePerShare, newProb, err := calc.Quote(market.YesSold, market.NoSold, amount, outcome)
+	calc, err := lmsr.New(market.LiquidityParam)
+	if err != nil {
+		return nil, fmt.Errorf("invalid liquidity parameter: %w", err)
+	}
+
+	cost, pricePerShare, newProb, err := calc.Quote(market.YesSold, market.NoSold, amount, outcome.String())
 	if err != nil {
 		return nil, fmt.Errorf("failed to calculate quote: %w", err)
 	}
@@ -173,6 +241,16 @@ func (s *MarketService) GetQuote(ctx context.Context, marketID, outcome string, 
 // CreateMarket creates a new prediction market.
 // Returns the XDR transaction and the new market's public key.
 func (s *MarketService) CreateMarket(ctx context.Context, req model.CreateMarketRequest) (*model.TransactionResult, string, error) {
+	// Validate request
+	if err := req.Validate(); err != nil {
+		return nil, "", err
+	}
+
+	// Check IPFS client is configured
+	if s.ipfsClient == nil {
+		return nil, "", ErrIPFSNotConfigured
+	}
+
 	// Generate new keypair for market account
 	marketKP, err := keypair.Random()
 	if err != nil {
@@ -197,7 +275,10 @@ func (s *MarketService) CreateMarket(ctx context.Context, req model.CreateMarket
 	}
 
 	// Calculate initial funding (LMSR initial liquidity)
-	calc, _ := lmsr.New(req.LiquidityParam)
+	calc, err := lmsr.New(req.LiquidityParam)
+	if err != nil {
+		return nil, "", fmt.Errorf("invalid liquidity parameter: %w", err)
+	}
 	initialFunding := calc.InitialLiquidity()
 
 	// Build transaction
@@ -224,19 +305,27 @@ func (s *MarketService) CreateMarket(ctx context.Context, req model.CreateMarket
 
 // BuildBuyTx builds a transaction for buying outcome tokens.
 func (s *MarketService) BuildBuyTx(ctx context.Context, req model.BuyRequest) (*model.TransactionResult, error) {
+	// Validate request
+	if err := req.Validate(); err != nil {
+		return nil, err
+	}
+
 	// Get quote to determine cost
 	quote, err := s.GetQuote(ctx, req.MarketID, req.Outcome, req.ShareAmount)
 	if err != nil {
 		return nil, err
 	}
 
+	// Apply slippage buffer
+	maxCost := quote.Cost * (1 + req.Slippage)
+
 	// Build transaction
 	xdr, err := s.txBuilder.BuildBuyTokenTx(ctx, stellar.BuyTokenTxParams{
 		UserPublicKey:   req.UserPublicKey,
 		MarketPublicKey: req.MarketID,
-		Outcome:         req.Outcome,
+		Outcome:         req.Outcome.String(),
 		TokenAmount:     req.ShareAmount,
-		MaxCost:         quote.Cost * 1.01, // 1% slippage buffer
+		MaxCost:         maxCost,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to build transaction: %w", err)
@@ -244,7 +333,7 @@ func (s *MarketService) BuildBuyTx(ctx context.Context, req model.BuyRequest) (*
 
 	return &model.TransactionResult{
 		XDR:         xdr,
-		Description: fmt.Sprintf("Buy %.2f %s tokens for %.4f EURMTL", req.ShareAmount, req.Outcome, quote.Cost),
+		Description: fmt.Sprintf("Buy %.2f %s tokens for %.4f EURMTL (max)", req.ShareAmount, req.Outcome, maxCost),
 		SignWith:    req.UserPublicKey,
 		SubmitURL:   s.stellarClient.HorizonURL() + "/transactions",
 	}, nil
@@ -252,8 +341,9 @@ func (s *MarketService) BuildBuyTx(ctx context.Context, req model.BuyRequest) (*
 
 // BuildResolveTx builds a transaction to resolve a market.
 func (s *MarketService) BuildResolveTx(ctx context.Context, req model.ResolveRequest) (*model.TransactionResult, error) {
-	if req.WinningOutcome != "YES" && req.WinningOutcome != "NO" {
-		return nil, ErrInvalidOutcome
+	// Validate request
+	if err := req.Validate(); err != nil {
+		return nil, err
 	}
 
 	market, err := s.GetMarket(ctx, req.MarketID)
@@ -268,7 +358,7 @@ func (s *MarketService) BuildResolveTx(ctx context.Context, req model.ResolveReq
 	xdr, err := s.txBuilder.BuildResolveTx(ctx, stellar.ResolveTxParams{
 		OraclePublicKey: req.OraclePublicKey,
 		MarketPublicKey: req.MarketID,
-		WinningOutcome:  req.WinningOutcome,
+		WinningOutcome:  req.WinningOutcome.String(),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to build transaction: %w", err)
@@ -313,13 +403,14 @@ func (s *MarketService) GetPriceHistory(ctx context.Context, marketID string, li
 }
 
 // decodeData decodes base64 data entry.
-func decodeData(encoded string) string {
+// Returns an error if decoding fails.
+func decodeData(encoded string) (string, error) {
 	if encoded == "" {
-		return ""
+		return "", nil
 	}
 	decoded, err := base64.StdEncoding.DecodeString(encoded)
 	if err != nil {
-		return ""
+		return "", fmt.Errorf("failed to decode base64: %w", err)
 	}
-	return string(decoded)
+	return string(decoded), nil
 }
