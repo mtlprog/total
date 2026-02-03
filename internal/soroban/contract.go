@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"log/slog"
 	"math"
 	"strconv"
 
@@ -118,9 +119,8 @@ func (ci *ContractInvoker) SimulateAndPrepare(ctx context.Context, txXDR string)
 		return "", fmt.Errorf("simulation failed: %w", err)
 	}
 
-	if simResult.Error != "" {
-		return "", fmt.Errorf("simulation error: %s", simResult.Error)
-	}
+	// Note: simResult.Error check is handled by SimulateTransaction which returns
+	// ErrSimulationFailed when the error field is non-empty.
 
 	// Parse the original transaction
 	var txEnvelope xdr.TransactionEnvelope
@@ -158,6 +158,10 @@ func (ci *ContractInvoker) SimulateAndPrepare(ctx context.Context, txXDR string)
 	}
 	newFee := int64(tx.Fee) + resourceFee
 	if newFee < 0 || newFee > math.MaxUint32 {
+		slog.Error("fee calculation overflow",
+			"tx_fee", tx.Fee,
+			"resource_fee", resourceFee,
+			"calculated_fee", newFee)
 		return "", fmt.Errorf("calculated fee %d overflows uint32", newFee)
 	}
 	tx.Fee = xdr.Uint32(newFee)

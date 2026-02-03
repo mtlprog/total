@@ -58,8 +58,8 @@ func (r *TradeRequest) Validate() error {
 	if err := model.ValidateStellarPublicKey(r.UserPublicKey); err != nil {
 		return err
 	}
-	if r.ContractID == "" {
-		return fmt.Errorf("contract ID is required")
+	if err := soroban.ValidateContractID(r.ContractID); err != nil {
+		return err
 	}
 	if !r.Outcome.IsValid() {
 		return model.ErrInvalidOutcome
@@ -93,6 +93,11 @@ func (s *MarketService) BuildBuyTx(ctx context.Context, req BuyRequest) (*model.
 	quote, err := s.GetQuote(ctx, req.ContractID, req.Outcome, req.ShareAmount)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get quote: %w", err)
+	}
+
+	// Validate quote cost
+	if quote.Cost <= 0 {
+		return nil, fmt.Errorf("invalid quote cost: %d (expected positive value)", quote.Cost)
 	}
 
 	// Apply slippage
@@ -135,14 +140,19 @@ func (s *MarketService) BuildSellTx(ctx context.Context, req SellRequest) (*mode
 		return nil, err
 	}
 
-	// Get quote for return
-	quote, err := s.GetQuote(ctx, req.ContractID, req.Outcome, req.ShareAmount)
+	// Get sell quote for accurate return calculation
+	sellQuote, err := s.GetSellQuote(ctx, req.ContractID, req.Outcome, req.ShareAmount)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get quote: %w", err)
+		return nil, fmt.Errorf("failed to get sell quote: %w", err)
 	}
 
-	// Apply slippage (inverse)
-	minReturn := int64(float64(quote.Cost) * (1 - req.Slippage))
+	// Validate return amount
+	if sellQuote.ReturnAmount <= 0 {
+		return nil, fmt.Errorf("invalid sell return: %d (expected positive value)", sellQuote.ReturnAmount)
+	}
+
+	// Apply slippage protection
+	minReturn := int64(float64(sellQuote.ReturnAmount) * (1 - req.Slippage))
 
 	amount := int64(req.ShareAmount * float64(soroban.ScaleFactor))
 
@@ -187,8 +197,8 @@ func (r *ResolveRequest) Validate() error {
 	if err := model.ValidateStellarPublicKey(r.OraclePublicKey); err != nil {
 		return err
 	}
-	if r.ContractID == "" {
-		return fmt.Errorf("contract ID is required")
+	if err := soroban.ValidateContractID(r.ContractID); err != nil {
+		return err
 	}
 	if !r.WinningOutcome.IsValid() {
 		return model.ErrInvalidOutcome
@@ -240,8 +250,8 @@ func (r *ClaimRequest) Validate() error {
 	if err := model.ValidateStellarPublicKey(r.UserPublicKey); err != nil {
 		return err
 	}
-	if r.ContractID == "" {
-		return fmt.Errorf("contract ID is required")
+	if err := soroban.ValidateContractID(r.ContractID); err != nil {
+		return err
 	}
 	return nil
 }
@@ -273,10 +283,16 @@ func (s *MarketService) BuildClaimTx(ctx context.Context, req ClaimRequest) (*mo
 	}, nil
 }
 
-// Quote represents a price quote from the contract.
+// Quote represents a price quote for buying from the contract.
 type Quote struct {
 	Cost       int64   // Scaled by 10^7
 	PriceAfter float64 // 0-1
+}
+
+// SellQuote represents a price quote for selling from the contract.
+type SellQuote struct {
+	ReturnAmount int64   // Scaled by 10^7
+	PriceAfter   float64 // 0-1
 }
 
 // GetQuote gets a price quote from a market contract.
@@ -342,5 +358,71 @@ func (s *MarketService) GetQuote(ctx context.Context, contractID string, outcome
 	return &Quote{
 		Cost:       cost,
 		PriceAfter: priceAfter,
+	}, nil
+}
+
+// GetSellQuote gets a sell price quote from a market contract.
+func (s *MarketService) GetSellQuote(ctx context.Context, contractID string, outcome model.Outcome, amount float64) (*SellQuote, error) {
+	amountScaled := int64(amount * float64(soroban.ScaleFactor))
+
+	outcomeU32, err := soroban.OutcomeToU32(string(outcome))
+	if err != nil {
+		return nil, fmt.Errorf("invalid outcome: %w", err)
+	}
+
+	txXDR, err := s.txBuilder.BuildGetSellQuoteTx(ctx, stellar.GetQuoteTxParams{
+		UserPublicKey: s.oraclePublicKey,
+		ContractID:    contractID,
+		Outcome:       outcomeU32,
+		Amount:        amountScaled,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to build sell quote transaction: %w", err)
+	}
+
+	simResult, err := s.sorobanClient.SimulateTransaction(ctx, txXDR)
+	if err != nil {
+		return nil, fmt.Errorf("failed to simulate sell quote: %w", err)
+	}
+
+	if simResult.Error != "" {
+		return nil, fmt.Errorf("simulation error: %s", simResult.Error)
+	}
+
+	if len(simResult.Results) == 0 || simResult.Results[0].XDR == "" {
+		return nil, fmt.Errorf("no result from simulation")
+	}
+
+	returnVal, err := soroban.ParseReturnValue(simResult.Results[0].XDR)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse return value: %w", err)
+	}
+
+	// Contract returns tuple (return_amount: i128, price_after: i128)
+	tuple, err := soroban.DecodeVec(returnVal)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode sell quote result: expected (return_amount, price_after) tuple, got %v: %w", returnVal.Type, err)
+	}
+
+	if len(tuple) < 2 {
+		return nil, fmt.Errorf("expected tuple of 2 elements, got %d", len(tuple))
+	}
+
+	returnAmount, err := soroban.DecodeI128(tuple[0])
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode return_amount from tuple: %w", err)
+	}
+
+	priceAfterScaled, err := soroban.DecodeI128(tuple[1])
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode price_after from tuple: %w", err)
+	}
+
+	// Convert price_after from scaled i128 to float64 (0-1)
+	priceAfter := float64(priceAfterScaled) / float64(soroban.ScaleFactor)
+
+	return &SellQuote{
+		ReturnAmount: returnAmount,
+		PriceAfter:   priceAfter,
 	}, nil
 }

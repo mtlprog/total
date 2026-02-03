@@ -226,6 +226,32 @@ func (b *Builder) BuildGetQuoteTx(ctx context.Context, params GetQuoteTxParams) 
 	return b.contractInvoker.BuildInvokeTx(ctx, invokeParams)
 }
 
+// BuildGetSellQuoteTx builds a transaction to get a sell quote (simulation only).
+func (b *Builder) BuildGetSellQuoteTx(ctx context.Context, params GetQuoteTxParams) (string, error) {
+	if b.contractInvoker == nil {
+		return "", fmt.Errorf("soroban client not configured")
+	}
+
+	userAccount, err := b.client.GetAccount(ctx, params.UserPublicKey)
+	if err != nil {
+		return "", fmt.Errorf("failed to get user account: %w", err)
+	}
+
+	args := []xdr.ScVal{
+		soroban.EncodeU32(params.Outcome),
+		soroban.EncodeI128(params.Amount),
+	}
+
+	invokeParams := soroban.InvokeParams{
+		SourceAccount: userAccount,
+		ContractID:    params.ContractID,
+		FunctionName:  "get_sell_quote",
+		Args:          args,
+	}
+
+	return b.contractInvoker.BuildInvokeTx(ctx, invokeParams)
+}
+
 // SimulateAndPrepareTx simulates a Soroban transaction and returns it with resources attached.
 func (b *Builder) SimulateAndPrepareTx(ctx context.Context, txXDR string) (string, error) {
 	if b.contractInvoker == nil {

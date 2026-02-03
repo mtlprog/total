@@ -32,4 +32,6 @@ pub enum MarketError {
     NothingToClaim = 13,
     /// Critical storage data missing (contract state corrupted)
     StorageCorrupted = 14,
+    /// Pool has insufficient funds (should not happen in normal operation)
+    InsufficientPool = 15,
 }
