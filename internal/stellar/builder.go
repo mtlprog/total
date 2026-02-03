@@ -11,6 +11,10 @@ import (
 	"github.com/stellar/go-stellar-sdk/txnbuild"
 )
 
+// TransactionTimeout is the default timeout for transactions in seconds.
+// Shorter timeout (2 minutes) prevents stale transactions from being valid too long.
+const TransactionTimeout = 120
+
 // Builder creates Stellar transactions for market operations.
 type Builder struct {
 	client            Client
@@ -148,7 +152,7 @@ func (b *Builder) BuildCreateMarketTx(ctx context.Context, params CreateMarketTx
 			Operations:           ops,
 			BaseFee:              b.baseFee,
 			Preconditions: txnbuild.Preconditions{
-				TimeBounds: txnbuild.NewTimeout(300),
+				TimeBounds: txnbuild.NewTimeout(TransactionTimeout),
 			},
 		},
 	)
@@ -195,16 +199,9 @@ func (b *Builder) BuildBuyTokenTx(ctx context.Context, params BuyTokenTxParams) 
 		return "", fmt.Errorf("failed to get market data: %w", err)
 	}
 
-	var assetCode string
-	switch params.Outcome {
-	case "YES":
-		decoded, _ := base64.StdEncoding.DecodeString(marketData["yes"])
-		assetCode = string(decoded)
-	case "NO":
-		decoded, _ := base64.StdEncoding.DecodeString(marketData["no"])
-		assetCode = string(decoded)
-	default:
-		return "", fmt.Errorf("invalid outcome: %s", params.Outcome)
+	assetCode, err := b.decodeAssetCode(marketData, params.Outcome)
+	if err != nil {
+		return "", err
 	}
 
 	eurmtl := txnbuild.CreditAsset{
@@ -246,7 +243,7 @@ func (b *Builder) BuildBuyTokenTx(ctx context.Context, params BuyTokenTxParams) 
 			Operations:           ops,
 			BaseFee:              b.baseFee,
 			Preconditions: txnbuild.Preconditions{
-				TimeBounds: txnbuild.NewTimeout(300),
+				TimeBounds: txnbuild.NewTimeout(TransactionTimeout),
 			},
 		},
 	)
@@ -299,7 +296,7 @@ func (b *Builder) BuildResolveTx(ctx context.Context, params ResolveTxParams) (s
 			Operations:           ops,
 			BaseFee:              b.baseFee,
 			Preconditions: txnbuild.Preconditions{
-				TimeBounds: txnbuild.NewTimeout(300),
+				TimeBounds: txnbuild.NewTimeout(TransactionTimeout),
 			},
 		},
 	)
@@ -338,16 +335,9 @@ func (b *Builder) BuildClaimWinningsTx(ctx context.Context, params ClaimWinnings
 		return "", fmt.Errorf("failed to get market data: %w", err)
 	}
 
-	var assetCode string
-	switch params.WinningOutcome {
-	case "YES":
-		decoded, _ := base64.StdEncoding.DecodeString(marketData["yes"])
-		assetCode = string(decoded)
-	case "NO":
-		decoded, _ := base64.StdEncoding.DecodeString(marketData["no"])
-		assetCode = string(decoded)
-	default:
-		return "", fmt.Errorf("invalid outcome: %s", params.WinningOutcome)
+	assetCode, err := b.decodeAssetCode(marketData, params.WinningOutcome)
+	if err != nil {
+		return "", err
 	}
 
 	eurmtl := txnbuild.CreditAsset{
@@ -384,7 +374,7 @@ func (b *Builder) BuildClaimWinningsTx(ctx context.Context, params ClaimWinnings
 			Operations:           ops,
 			BaseFee:              b.baseFee,
 			Preconditions: txnbuild.Preconditions{
-				TimeBounds: txnbuild.NewTimeout(300),
+				TimeBounds: txnbuild.NewTimeout(TransactionTimeout),
 			},
 		},
 	)
@@ -398,4 +388,33 @@ func (b *Builder) BuildClaimWinningsTx(ctx context.Context, params ClaimWinnings
 	}
 
 	return xdr, nil
+}
+
+// decodeAssetCode decodes the asset code from market data for the given outcome.
+func (b *Builder) decodeAssetCode(marketData map[string]string, outcome string) (string, error) {
+	var dataKey string
+	switch outcome {
+	case "YES":
+		dataKey = "yes"
+	case "NO":
+		dataKey = "no"
+	default:
+		return "", fmt.Errorf("invalid outcome: %s", outcome)
+	}
+
+	encoded, ok := marketData[dataKey]
+	if !ok {
+		return "", fmt.Errorf("market data missing %s asset code", outcome)
+	}
+
+	decoded, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil {
+		return "", fmt.Errorf("failed to decode %s asset code: %w", outcome, err)
+	}
+
+	if len(decoded) == 0 {
+		return "", fmt.Errorf("%s asset code is empty", outcome)
+	}
+
+	return string(decoded), nil
 }

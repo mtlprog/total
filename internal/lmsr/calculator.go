@@ -6,10 +6,11 @@ import (
 )
 
 var (
-	ErrInvalidOutcome     = errors.New("invalid outcome: must be YES or NO")
-	ErrNegativeAmount     = errors.New("amount must be positive")
-	ErrInvalidLiquidity   = errors.New("liquidity parameter must be positive")
-	ErrNegativeQuantities = errors.New("quantities must be non-negative")
+	ErrInvalidOutcome      = errors.New("invalid outcome: must be YES or NO")
+	ErrNegativeAmount      = errors.New("amount must be positive")
+	ErrInvalidLiquidity    = errors.New("liquidity parameter must be positive")
+	ErrNegativeQuantities  = errors.New("quantities must be non-negative")
+	ErrInsufficientTokens  = errors.New("cannot sell more than available")
 )
 
 // Calculator implements LMSR (Logarithmic Market Scoring Rule) pricing.
@@ -95,12 +96,12 @@ func (c *Calculator) CalculateSellReturn(qYes, qNo, amount float64, outcome stri
 	switch outcome {
 	case "YES":
 		if qYes < amount {
-			return 0, errors.New("cannot sell more than available")
+			return 0, ErrInsufficientTokens
 		}
 		costAfter = c.cost(qYes-amount, qNo)
 	case "NO":
 		if qNo < amount {
-			return 0, errors.New("cannot sell more than available")
+			return 0, ErrInsufficientTokens
 		}
 		costAfter = c.cost(qYes, qNo-amount)
 	default:
