@@ -22,9 +22,10 @@ const EXP_ITERATIONS: u32 = 20;
 /// Input and output are scaled by SCALE_FACTOR.
 /// For numerical stability, we limit the input range.
 fn exp_scaled(x: i128) -> Result<i128, MarketError> {
-    // For very negative x, return near-zero
+    // For very negative x, return smallest positive value (avoids division by zero)
+    // e^(-20) ≈ 2e-9, which is effectively zero but we return 1 to prevent 0/x issues
     if x < -20 * SCALE_FACTOR {
-        return Ok(0);
+        return Ok(1);
     }
     // For very large x, cap to prevent overflow
     if x > 20 * SCALE_FACTOR {
@@ -316,10 +317,11 @@ mod tests {
     }
 
     #[test]
-    fn test_exp_scaled_very_negative_returns_zero() {
-        // exp(x) for x < -20 * SCALE_FACTOR should return near-zero
+    fn test_exp_scaled_very_negative_returns_one() {
+        // exp(x) for x < -20 * SCALE_FACTOR should return 1 (smallest positive value)
+        // to prevent division by zero in price calculations
         let result = exp_scaled(-21 * SCALE_FACTOR).unwrap();
-        assert_eq!(result, 0);
+        assert_eq!(result, 1);
     }
 
     #[test]

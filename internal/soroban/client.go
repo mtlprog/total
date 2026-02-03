@@ -19,7 +19,12 @@ var (
 	ErrTransactionFailed   = errors.New("transaction failed")
 	ErrTransactionNotFound = errors.New("transaction not found")
 	ErrTimeout             = errors.New("timeout waiting for transaction")
+	ErrUnknownStatus       = errors.New("unknown transaction status")
 )
+
+// maxUnknownStatusRetries is the maximum number of consecutive unknown statuses
+// before failing. This prevents infinite polling if the API returns unexpected values.
+const maxUnknownStatusRetries = 5
 
 // Client is a Soroban RPC client.
 type Client struct {
@@ -84,7 +89,7 @@ func (c *Client) call(ctx context.Context, method string, params any) (*RPCRespo
 	}
 
 	if resp.Error != nil {
-		return nil, fmt.Errorf("%w: %s", ErrRPCError, resp.Error.Error())
+		return nil, fmt.Errorf("%w: method %s: %s", ErrRPCError, method, resp.Error.Error())
 	}
 
 	return &resp, nil
@@ -206,6 +211,8 @@ func (c *Client) WaitForTransaction(ctx context.Context, hash string, timeout ti
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
 
+	unknownStatusCount := 0
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -222,16 +229,23 @@ func (c *Client) WaitForTransaction(ctx context.Context, hash string, timeout ti
 
 			switch result.Status {
 			case TxResultNotFound:
+				unknownStatusCount = 0 // Reset on known status
 				continue
 			case TxResultSuccess:
 				return result, nil
 			case TxResultFailed:
 				return result, fmt.Errorf("%w: %s", ErrTransactionFailed, result.ResultXdr)
 			default:
+				unknownStatusCount++
+				if unknownStatusCount >= maxUnknownStatusRetries {
+					return nil, fmt.Errorf("%w: received %q %d times for hash %s",
+						ErrUnknownStatus, result.Status, unknownStatusCount, hash)
+				}
 				// Log unknown status - may indicate new Soroban RPC version
 				slog.Warn("unknown transaction status, continuing to poll",
 					"status", result.Status,
-					"hash", hash)
+					"hash", hash,
+					"retry", unknownStatusCount)
 				continue
 			}
 		}

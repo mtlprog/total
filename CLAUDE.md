@@ -63,6 +63,8 @@ contracts/
 - Cost function: `C(q) = b * ln(e^(qYes/b) + e^(qNo/b))`
 - Parameter `b` controls liquidity depth
 - Initial funding = `b * ln(2)` EURMTL
+- LMSR is symmetric: buying and immediately selling same amount returns same cost (no spread)
+- Use `get_sell_quote` for sell transactions, not `get_quote` (they return different values)
 
 ### Market Lifecycle
 1. Oracle deploys market contract via factory
@@ -110,7 +112,9 @@ contracts/
 - Initialize SAC with `stellar contract asset deploy`
 - In tests, `#[should_panic(expected = "...")]` must use error codes like `"Error(Contract, #7)"`, not error names
 - Avoid `.unwrap()` on storage access - use `.ok_or(MarketError::StorageCorrupted)?` for proper error handling
-- Error codes: NotInitialized=#2, AlreadyResolved=#3, NotResolved=#4, InvalidOutcome=#5, InvalidAmount=#6, InsufficientBalance=#7, SlippageExceeded=#8, ReturnTooLow=#9, Unauthorized=#10
+- Always guard pool subtraction: `if pool < amount { return Err(MarketError::InsufficientPool); }`
+- Document token_client.transfer() panics with comments (they can fail on insufficient balance)
+- Error codes: NotInitialized=#2, AlreadyResolved=#3, NotResolved=#4, InvalidOutcome=#5, InvalidAmount=#6, InsufficientBalance=#7, SlippageExceeded=#8, ReturnTooLow=#9, Unauthorized=#10, InvalidLiquidity=#11, Overflow=#12, NothingToClaim=#13, StorageCorrupted=#14, InsufficientPool=#15
 
 ### Refactoring Patterns
 - When moving types between packages (e.g., model → service), update tests that reference them
@@ -134,7 +138,8 @@ contracts/
 - `resolve(oracle, winning_outcome)` - Oracle resolves market
 - `claim(user)` - Claim winnings after resolution
 - `get_price(outcome)` - Get current price (0-SCALE_FACTOR)
-- `get_quote(outcome, amount)` - Get quote (cost, price_after)
+- `get_quote(outcome, amount)` - Get buy quote (cost, price_after)
+- `get_sell_quote(outcome, amount)` - Get sell quote (return_amount, price_after)
 - `get_balance(user, outcome)` - Get user's token balance
 - `get_state()` - Get (yes_sold, no_sold, pool, resolved)
 
