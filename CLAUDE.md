@@ -1,6 +1,10 @@
-# Total
+# CLAUDE.md
 
-Go web application with PostgreSQL database.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Total
+
+Go web application with PostgreSQL database. Based on [mtlprog/lore](https://github.com/mtlprog/lore) architecture.
 
 ## Commands
 
@@ -39,6 +43,11 @@ internal/
 - pgx/v5 driver
 - urfave/cli for CLI
 - slog/JSON structured logging
+
+## Gotchas
+
+- `.gitignore`: use `/total` not `total` to avoid ignoring `cmd/total/`
+- goose migrations require `stdlib.OpenDBFromPool(pool)` to get `*sql.DB` from pgx pool
 
 ## Development
 
