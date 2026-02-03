@@ -1,5 +1,7 @@
 //! LMSR (Logarithmic Market Scoring Rule) pricing implementation.
 //!
+//! Reference: https://gnosis-pm-js.readthedocs.io/en/v1.3.0/lmsr-primer.html
+//!
 //! All calculations use fixed-point arithmetic with SCALE_FACTOR (10^7).
 //! This matches Stellar's 7 decimal place precision.
 //!
@@ -9,9 +11,11 @@
 //! - Buy cost: C(q_new) - C(q_old)
 
 use crate::error::MarketError;
-use crate::storage::SCALE_FACTOR;
+use crate::storage::{LN2_SCALED, SCALE_FACTOR};
 
-/// Maximum iterations for exp approximation
+/// Maximum iterations for exp Taylor series approximation.
+/// 20 iterations provides approximately 7+ decimal digits of accuracy
+/// for inputs within the [-20, 20] range (scaled), matching SCALE_FACTOR precision.
 const EXP_ITERATIONS: u32 = 20;
 
 /// Scaled exp function using Taylor series: e^x = 1 + x + x²/2! + x³/3! + ...
@@ -47,9 +51,9 @@ fn exp_scaled(x: i128) -> Result<i128, MarketError> {
     Ok(result.max(0))
 }
 
-/// Natural logarithm using Newton-Raphson method.
+/// Natural logarithm using Taylor series expansion for ln(1+y).
 /// Input and output are scaled by SCALE_FACTOR.
-/// ln(x) where x is scaled by SCALE_FACTOR.
+/// Returns Overflow error if x <= 0.
 fn ln_scaled(x: i128) -> Result<i128, MarketError> {
     if x <= 0 {
         return Err(MarketError::Overflow);
@@ -111,8 +115,7 @@ fn ln_scaled(x: i128) -> Result<i128, MarketError> {
     }
 
     // Add n * ln(2)
-    let ln2_scaled: i128 = 6_931_472; // ln(2) * 10^7
-    let adjustment = n.checked_mul(ln2_scaled).ok_or(MarketError::Overflow)?;
+    let adjustment = n.checked_mul(LN2_SCALED).ok_or(MarketError::Overflow)?;
     result = result.checked_add(adjustment).ok_or(MarketError::Overflow)?;
 
     Ok(result)
@@ -243,9 +246,10 @@ pub fn initial_liquidity(b: i128) -> Result<i128, MarketError> {
     if b <= 0 {
         return Err(MarketError::InvalidLiquidity);
     }
-    let ln2_scaled: i128 = 6_931_472; // ln(2) * 10^7
-    b.checked_mul(ln2_scaled).ok_or(MarketError::Overflow)?
-        .checked_div(SCALE_FACTOR).ok_or(MarketError::Overflow)
+    b.checked_mul(LN2_SCALED)
+        .ok_or(MarketError::Overflow)?
+        .checked_div(SCALE_FACTOR)
+        .ok_or(MarketError::Overflow)
 }
 
 #[cfg(test)]
@@ -295,7 +299,94 @@ mod tests {
         let b = 100 * SCALE_FACTOR;
         let liquidity = initial_liquidity(b).unwrap();
         // Should be approximately 100 * 0.693 = 69.3
-        assert!(liquidity > 69 * SCALE_FACTOR && liquidity < 70 * SCALE_FACTOR,
-            "initial_liquidity = {}", liquidity);
+        assert!(
+            liquidity > 69 * SCALE_FACTOR && liquidity < 70 * SCALE_FACTOR,
+            "initial_liquidity = {}",
+            liquidity
+        );
+    }
+
+    // --- Overflow boundary tests ---
+
+    #[test]
+    fn test_exp_scaled_overflow_positive() {
+        // exp(x) for x > 20 * SCALE_FACTOR should return Overflow error
+        let result = exp_scaled(21 * SCALE_FACTOR);
+        assert!(matches!(result, Err(MarketError::Overflow)));
+    }
+
+    #[test]
+    fn test_exp_scaled_very_negative_returns_zero() {
+        // exp(x) for x < -20 * SCALE_FACTOR should return near-zero
+        let result = exp_scaled(-21 * SCALE_FACTOR).unwrap();
+        assert_eq!(result, 0);
+    }
+
+    #[test]
+    fn test_ln_scaled_zero_returns_overflow() {
+        // ln(0) is undefined, should return Overflow error
+        let result = ln_scaled(0);
+        assert!(matches!(result, Err(MarketError::Overflow)));
+    }
+
+    #[test]
+    fn test_ln_scaled_negative_returns_overflow() {
+        // ln(negative) is undefined, should return Overflow error
+        let result = ln_scaled(-SCALE_FACTOR);
+        assert!(matches!(result, Err(MarketError::Overflow)));
+    }
+
+    #[test]
+    fn test_invalid_liquidity_param() {
+        // Zero liquidity should fail
+        let result = initial_liquidity(0);
+        assert!(matches!(result, Err(MarketError::InvalidLiquidity)));
+
+        // Negative liquidity should fail
+        let result = initial_liquidity(-100);
+        assert!(matches!(result, Err(MarketError::InvalidLiquidity)));
+    }
+
+    #[test]
+    fn test_invalid_outcome() {
+        let b = 100 * SCALE_FACTOR;
+
+        // Invalid outcome in calculate_buy_cost
+        let result = calculate_buy_cost(0, 0, 10 * SCALE_FACTOR, 99, b);
+        assert!(matches!(result, Err(MarketError::InvalidOutcome)));
+
+        // Invalid outcome in calculate_sell_return
+        let result = calculate_sell_return(100 * SCALE_FACTOR, 100 * SCALE_FACTOR, 10 * SCALE_FACTOR, 99, b);
+        assert!(matches!(result, Err(MarketError::InvalidOutcome)));
+
+        // Invalid outcome in calculate_price
+        let result = calculate_price(0, 0, 99, b);
+        assert!(matches!(result, Err(MarketError::InvalidOutcome)));
+    }
+
+    #[test]
+    fn test_invalid_amount() {
+        let b = 100 * SCALE_FACTOR;
+
+        // Zero amount
+        let result = calculate_buy_cost(0, 0, 0, 0, b);
+        assert!(matches!(result, Err(MarketError::InvalidAmount)));
+
+        // Negative amount
+        let result = calculate_buy_cost(0, 0, -10, 0, b);
+        assert!(matches!(result, Err(MarketError::InvalidAmount)));
+    }
+
+    #[test]
+    fn test_sell_insufficient_global_balance() {
+        let b = 100 * SCALE_FACTOR;
+
+        // Try to sell more YES than exists
+        let result = calculate_sell_return(5 * SCALE_FACTOR, 10 * SCALE_FACTOR, 10 * SCALE_FACTOR, 0, b);
+        assert!(matches!(result, Err(MarketError::InsufficientBalance)));
+
+        // Try to sell more NO than exists
+        let result = calculate_sell_return(10 * SCALE_FACTOR, 5 * SCALE_FACTOR, 10 * SCALE_FACTOR, 1, b);
+        assert!(matches!(result, Err(MarketError::InsufficientBalance)));
     }
 }

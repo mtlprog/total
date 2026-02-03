@@ -1,6 +1,9 @@
 package soroban
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"fmt"
+)
 
 // JSON-RPC request/response types for Soroban RPC API.
 // Reference: https://developers.stellar.org/docs/data/rpc/api-reference
@@ -186,20 +189,31 @@ const (
 // ScaleFactor for fixed-point arithmetic (10^7 like Stellar).
 const ScaleFactor int64 = 10_000_000
 
+// ErrInvalidOutcome is returned when outcome string is not "YES" or "NO".
+var ErrInvalidOutcome = fmt.Errorf("invalid outcome: must be YES or NO")
+
 // OutcomeToU32 converts a string outcome ("YES"/"NO") to contract u32 format.
-// Returns OutcomeYes (0) for "YES", OutcomeNo (1) for "NO".
-func OutcomeToU32(outcome string) uint32 {
-	if outcome == "YES" {
-		return OutcomeYes
+// Returns error for invalid inputs (anything other than "YES" or "NO").
+func OutcomeToU32(outcome string) (uint32, error) {
+	switch outcome {
+	case "YES":
+		return OutcomeYes, nil
+	case "NO":
+		return OutcomeNo, nil
+	default:
+		return 0, fmt.Errorf("%w: got %q", ErrInvalidOutcome, outcome)
 	}
-	return OutcomeNo
 }
 
 // U32ToOutcome converts a contract u32 outcome to string format.
-// Returns "YES" for 0, "NO" for all other values.
-func U32ToOutcome(outcome uint32) string {
-	if outcome == OutcomeYes {
-		return "YES"
+// Returns error for invalid inputs (anything other than 0 or 1).
+func U32ToOutcome(outcome uint32) (string, error) {
+	switch outcome {
+	case OutcomeYes:
+		return "YES", nil
+	case OutcomeNo:
+		return "NO", nil
+	default:
+		return "", fmt.Errorf("%w: got %d", ErrInvalidOutcome, outcome)
 	}
-	return "NO"
 }

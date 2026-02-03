@@ -44,7 +44,7 @@ func (c *Calculator) Price(qYes, qNo float64) (priceYes, priceNo float64, err er
 	}
 
 	// P(yes) = exp(qYes/b) / (exp(qYes/b) + exp(qNo/b))
-	// Use log-sum-exp trick for numerical stability
+	// Direct computation is numerically stable here since we're computing a ratio
 	expYes := math.Exp(qYes / c.b)
 	expNo := math.Exp(qNo / c.b)
 	sum := expYes + expNo

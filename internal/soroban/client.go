@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"sync/atomic"
 	"time"
@@ -227,6 +228,10 @@ func (c *Client) WaitForTransaction(ctx context.Context, hash string, timeout ti
 			case TxResultFailed:
 				return result, fmt.Errorf("%w: %s", ErrTransactionFailed, result.ResultXdr)
 			default:
+				// Log unknown status - may indicate new Soroban RPC version
+				slog.Warn("unknown transaction status, continuing to poll",
+					"status", result.Status,
+					"hash", hash)
 				continue
 			}
 		}

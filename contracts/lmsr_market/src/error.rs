@@ -30,4 +30,6 @@ pub enum MarketError {
     Overflow = 12,
     /// User has no winning tokens to claim
     NothingToClaim = 13,
+    /// Critical storage data missing (contract state corrupted)
+    StorageCorrupted = 14,
 }

@@ -14,6 +14,7 @@ Stellar prediction market platform. Stateless web application that builds Soroba
 - `make lint` - Format and vet code
 - `cd contracts && cargo test` - Run Soroban contract tests
 - `cd contracts && cargo build --release --target wasm32-unknown-unknown` - Build Soroban WASM
+- `rustup default stable` - Required before cargo commands on fresh Rust install
 
 ## Project Structure
 
@@ -107,6 +108,9 @@ contracts/
 - Test with `soroban-sdk` testutils feature
 - Deploy with `soroban contract deploy` CLI
 - Initialize SAC with `stellar contract asset deploy`
+- In tests, `#[should_panic(expected = "...")]` must use error codes like `"Error(Contract, #7)"`, not error names
+- Avoid `.unwrap()` on storage access - use `.ok_or(MarketError::StorageCorrupted)?` for proper error handling
+- Error codes: NotInitialized=#2, AlreadyResolved=#3, NotResolved=#4, InvalidOutcome=#5, InvalidAmount=#6, InsufficientBalance=#7, SlippageExceeded=#8, ReturnTooLow=#9, Unauthorized=#10
 
 ### Refactoring Patterns
 - When moving types between packages (e.g., model → service), update tests that reference them

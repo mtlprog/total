@@ -16,6 +16,10 @@ pub enum FactoryError {
     Unauthorized = 3,
     /// Market deployment failed
     DeploymentFailed = 4,
+    /// Market index out of bounds
+    IndexOutOfBounds = 5,
+    /// Critical storage data missing
+    StorageCorrupted = 6,
 }
 
 #[derive(Clone)]
@@ -99,13 +103,13 @@ impl MarketFactory {
             .storage()
             .instance()
             .get(&DataKey::MarketWasmHash)
-            .unwrap();
+            .ok_or(FactoryError::StorageCorrupted)?;
 
         let collateral_token: Address = env
             .storage()
             .instance()
             .get(&DataKey::DefaultCollateralToken)
-            .unwrap();
+            .ok_or(FactoryError::StorageCorrupted)?;
 
         // Deploy the market contract
         let market_address = env.deployer().with_current_contract(salt).deploy_v2(
@@ -120,7 +124,11 @@ impl MarketFactory {
         );
 
         // Track the deployed market
-        let mut markets: Vec<Address> = env.storage().instance().get(&DataKey::Markets).unwrap();
+        let mut markets: Vec<Address> = env
+            .storage()
+            .instance()
+            .get(&DataKey::Markets)
+            .ok_or(FactoryError::StorageCorrupted)?;
         markets.push_back(market_address.clone());
         env.storage().instance().set(&DataKey::Markets, &markets);
 
@@ -130,37 +138,50 @@ impl MarketFactory {
     /// Get all deployed market addresses.
     pub fn list_markets(env: Env) -> Result<Vec<Address>, FactoryError> {
         Self::require_initialized(&env)?;
-        Ok(env.storage().instance().get(&DataKey::Markets).unwrap())
+        env.storage()
+            .instance()
+            .get(&DataKey::Markets)
+            .ok_or(FactoryError::StorageCorrupted)
     }
 
     /// Get the number of deployed markets.
     pub fn market_count(env: Env) -> Result<u32, FactoryError> {
         Self::require_initialized(&env)?;
-        let markets: Vec<Address> = env.storage().instance().get(&DataKey::Markets).unwrap();
+        let markets: Vec<Address> = env
+            .storage()
+            .instance()
+            .get(&DataKey::Markets)
+            .ok_or(FactoryError::StorageCorrupted)?;
         Ok(markets.len())
     }
 
     /// Get a market address by index.
     pub fn get_market(env: Env, index: u32) -> Result<Address, FactoryError> {
         Self::require_initialized(&env)?;
-        let markets: Vec<Address> = env.storage().instance().get(&DataKey::Markets).unwrap();
-        Ok(markets.get(index).unwrap())
+        let markets: Vec<Address> = env
+            .storage()
+            .instance()
+            .get(&DataKey::Markets)
+            .ok_or(FactoryError::StorageCorrupted)?;
+        markets.get(index).ok_or(FactoryError::IndexOutOfBounds)
     }
 
     /// Get the admin address.
     pub fn get_admin(env: Env) -> Result<Address, FactoryError> {
         Self::require_initialized(&env)?;
-        Ok(env.storage().instance().get(&DataKey::Admin).unwrap())
+        env.storage()
+            .instance()
+            .get(&DataKey::Admin)
+            .ok_or(FactoryError::StorageCorrupted)
     }
 
     /// Get the market WASM hash.
     pub fn get_market_wasm_hash(env: Env) -> Result<BytesN<32>, FactoryError> {
         Self::require_initialized(&env)?;
-        Ok(env
-            .storage()
+        env.storage()
             .instance()
             .get(&DataKey::MarketWasmHash)
-            .unwrap())
+            .ok_or(FactoryError::StorageCorrupted)
     }
 
     /// Update the market WASM hash (admin only).
@@ -209,7 +230,11 @@ impl MarketFactory {
     }
 
     fn require_admin(env: &Env, caller: &Address) -> Result<(), FactoryError> {
-        let admin: Address = env.storage().instance().get(&DataKey::Admin).unwrap();
+        let admin: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Admin)
+            .ok_or(FactoryError::StorageCorrupted)?;
         if *caller != admin {
             return Err(FactoryError::Unauthorized);
         }
@@ -242,7 +267,7 @@ mod test {
     }
 
     #[test]
-    #[should_panic(expected = "AlreadyInitialized")]
+    #[should_panic(expected = "Error(Contract, #1)")] // AlreadyInitialized = 1
     fn test_double_initialize() {
         let env = Env::default();
         env.mock_all_auths();
@@ -256,5 +281,87 @@ mod test {
 
         client.initialize(&admin, &wasm_hash, &collateral_token);
         client.initialize(&admin, &wasm_hash, &collateral_token);
+    }
+
+    #[test]
+    #[should_panic(expected = "Error(Contract, #5)")] // IndexOutOfBounds = 5
+    fn test_get_market_out_of_bounds() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let contract_id = env.register(MarketFactory, ());
+        let client = MarketFactoryClient::new(&env, &contract_id);
+
+        let admin = Address::generate(&env);
+        let wasm_hash = BytesN::from_array(&env, &[0u8; 32]);
+        let collateral_token = Address::generate(&env);
+
+        client.initialize(&admin, &wasm_hash, &collateral_token);
+
+        // No markets deployed, any index should be out of bounds
+        client.get_market(&0);
+    }
+
+    #[test]
+    #[should_panic(expected = "Error(Contract, #3)")] // Unauthorized = 3
+    fn test_set_market_wasm_hash_by_non_admin() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let contract_id = env.register(MarketFactory, ());
+        let client = MarketFactoryClient::new(&env, &contract_id);
+
+        let admin = Address::generate(&env);
+        let wasm_hash = BytesN::from_array(&env, &[0u8; 32]);
+        let collateral_token = Address::generate(&env);
+
+        client.initialize(&admin, &wasm_hash, &collateral_token);
+
+        // Try to update wasm hash with non-admin
+        let attacker = Address::generate(&env);
+        let new_wasm_hash = BytesN::from_array(&env, &[1u8; 32]);
+        client.set_market_wasm_hash(&attacker, &new_wasm_hash);
+    }
+
+    #[test]
+    #[should_panic(expected = "Error(Contract, #3)")] // Unauthorized = 3
+    fn test_set_default_collateral_token_by_non_admin() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let contract_id = env.register(MarketFactory, ());
+        let client = MarketFactoryClient::new(&env, &contract_id);
+
+        let admin = Address::generate(&env);
+        let wasm_hash = BytesN::from_array(&env, &[0u8; 32]);
+        let collateral_token = Address::generate(&env);
+
+        client.initialize(&admin, &wasm_hash, &collateral_token);
+
+        // Try to update collateral token with non-admin
+        let attacker = Address::generate(&env);
+        let new_token = Address::generate(&env);
+        client.set_default_collateral_token(&attacker, &new_token);
+    }
+
+    #[test]
+    #[should_panic(expected = "Error(Contract, #2)")] // NotInitialized = 2
+    fn test_deploy_on_uninitialized_factory() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let contract_id = env.register(MarketFactory, ());
+        let client = MarketFactoryClient::new(&env, &contract_id);
+
+        let oracle = Address::generate(&env);
+        let salt = BytesN::from_array(&env, &[42u8; 32]);
+
+        client.deploy_market(
+            &oracle,
+            &(100 * 10_000_000i128),
+            &soroban_sdk::String::from_str(&env, "QmTest"),
+            &(70 * 10_000_000i128),
+            &salt,
+        );
     }
 }

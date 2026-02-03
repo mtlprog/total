@@ -71,7 +71,7 @@ func ValidateStellarPublicKey(key string) error {
 
 // Market represents a prediction market on Stellar.
 type Market struct {
-	ID              string     `json:"id"`               // Market account public key
+	ID              string     `json:"id"`               // Market contract ID (Soroban)
 	Question        string     `json:"question"`         // Main question
 	Description     string     `json:"description"`      // Detailed description
 	YesAsset        string     `json:"yes_asset"`        // YES token asset code
@@ -91,6 +91,40 @@ type Market struct {
 // IsResolved returns true if the market has been resolved.
 func (m *Market) IsResolved() bool {
 	return m.Resolution != ""
+}
+
+// Validate checks all market invariants.
+// Returns an error if any invariant is violated.
+func (m *Market) Validate() error {
+	if m.ID == "" {
+		return errors.New("market ID is required")
+	}
+	if m.LiquidityParam <= 0 {
+		return ErrInvalidLiquidityParam
+	}
+	if m.YesSold < 0 {
+		return errors.New("yes_sold must be non-negative")
+	}
+	if m.NoSold < 0 {
+		return errors.New("no_sold must be non-negative")
+	}
+	if m.PriceYes < 0 || m.PriceYes > 1 {
+		return errors.New("price_yes must be in range [0, 1]")
+	}
+	if m.PriceNo < 0 || m.PriceNo > 1 {
+		return errors.New("price_no must be in range [0, 1]")
+	}
+	// Resolution and ResolvedAt should be consistent
+	if m.Resolution != "" && !m.Resolution.IsValid() {
+		return ErrInvalidOutcome
+	}
+	if m.Resolution != "" && m.ResolvedAt == nil {
+		return errors.New("resolved market must have resolved_at timestamp")
+	}
+	if m.Resolution == "" && m.ResolvedAt != nil {
+		return errors.New("unresolved market must not have resolved_at timestamp")
+	}
+	return nil
 }
 
 // MarketMetadata is stored in IPFS.

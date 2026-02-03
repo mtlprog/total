@@ -31,9 +31,12 @@ pub enum DataKey {
 pub const OUTCOME_YES: u32 = 0;
 pub const OUTCOME_NO: u32 = 1;
 
-/// Scale factor for fixed-point arithmetic (7 decimal places like Stellar)
+/// Scale factor for fixed-point arithmetic.
+/// Uses 7 decimal places to match Stellar/Soroban native token precision,
+/// ensuring seamless conversion between contract amounts and on-chain balances.
 pub const SCALE_FACTOR: i128 = 10_000_000; // 10^7
 
-/// Natural log of 2 scaled (ln(2) * SCALE_FACTOR)
+/// Natural log of 2 scaled (ln(2) * SCALE_FACTOR).
 /// ln(2) ≈ 0.6931472
+/// Used for initial liquidity calculation: b * ln(2).
 pub const LN2_SCALED: i128 = 6_931_472;
