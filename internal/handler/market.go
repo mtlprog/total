@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"github.com/mtlprog/total/internal/chart"
+	"github.com/mtlprog/total/internal/lmsr"
 	"github.com/mtlprog/total/internal/model"
 	"github.com/mtlprog/total/internal/service"
 	"github.com/mtlprog/total/internal/template"
@@ -196,12 +198,19 @@ func (h *MarketHandler) handleBuildBuyTx(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// Parse slippage (default 1%)
-	slippage := 0.01
+	// Parse slippage (default 1%, max 10%)
+	slippage := model.DefaultSlippage
 	if slippageStr != "" {
-		if s, err := strconv.ParseFloat(slippageStr, 64); err == nil && s > 0 && s < 1 {
-			slippage = s
+		s, err := strconv.ParseFloat(slippageStr, 64)
+		if err != nil {
+			http.Error(w, "Invalid slippage: must be a number", http.StatusBadRequest)
+			return
 		}
+		if s <= 0 || s > model.MaxSlippage {
+			http.Error(w, fmt.Sprintf("Invalid slippage: must be between 0 and %.0f%% (e.g., 0.01 for 1%%)", model.MaxSlippage*100), http.StatusBadRequest)
+			return
+		}
+		slippage = s
 	}
 
 	req := model.BuyRequest{
@@ -276,6 +285,8 @@ func (h *MarketHandler) handleCreateMarket(w http.ResponseWriter, r *http.Reques
 		http.Error(w, "Invalid close time format", http.StatusBadRequest)
 		return
 	}
+	// Treat as UTC for consistent timezone handling
+	closeTime = closeTime.UTC()
 
 	liquidity, err := strconv.ParseFloat(liquidityStr, 64)
 	if err != nil || liquidity <= 0 {
@@ -377,30 +388,46 @@ func (h *MarketHandler) SetMarketIDs(ids []string) {
 }
 
 // userFriendlyError converts internal errors to user-friendly messages.
+// Uses errors.Is() to properly match wrapped errors.
 func userFriendlyError(err error) string {
-	switch err {
-	case service.ErrMarketNotFound:
+	switch {
+	case errors.Is(err, service.ErrMarketNotFound):
 		return "Market not found"
-	case service.ErrMarketResolved:
+	case errors.Is(err, service.ErrMarketResolved):
 		return "Market has already been resolved"
-	case service.ErrInvalidOutcome:
+	case errors.Is(err, service.ErrInvalidOutcome):
 		return "Invalid outcome: must be YES or NO"
-	case service.ErrIPFSNotConfigured:
+	case errors.Is(err, service.ErrIPFSNotConfigured):
 		return "IPFS is not configured"
-	case model.ErrEmptyQuestion:
+	case errors.Is(err, service.ErrInvalidMarketData):
+		return "Market data is corrupted or invalid"
+	case errors.Is(err, model.ErrEmptyQuestion):
 		return "Question is required"
-	case model.ErrQuestionTooLong:
+	case errors.Is(err, model.ErrQuestionTooLong):
 		return fmt.Sprintf("Question exceeds maximum length (%d characters)", model.MaxQuestionLength)
-	case model.ErrDescriptionTooLong:
+	case errors.Is(err, model.ErrDescriptionTooLong):
 		return fmt.Sprintf("Description exceeds maximum length (%d characters)", model.MaxDescriptionLength)
-	case model.ErrInvalidLiquidityParam:
+	case errors.Is(err, model.ErrInvalidLiquidityParam):
 		return "Liquidity parameter must be a positive number"
-	case model.ErrInvalidShareAmount:
+	case errors.Is(err, model.ErrInvalidShareAmount):
 		return "Share amount must be a positive number"
-	case model.ErrCloseTimeInPast:
+	case errors.Is(err, model.ErrCloseTimeInPast):
 		return "Close time must be in the future"
-	case model.ErrInvalidPublicKey:
+	case errors.Is(err, model.ErrInvalidPublicKey):
 		return "Invalid Stellar public key format"
+	case errors.Is(err, model.ErrInvalidSlippage):
+		return fmt.Sprintf("Slippage must be between 0 and %.0f%%", model.MaxSlippage*100)
+	// LMSR errors
+	case errors.Is(err, lmsr.ErrInvalidOutcome):
+		return "Invalid outcome: must be YES or NO"
+	case errors.Is(err, lmsr.ErrNegativeAmount):
+		return "Amount must be positive"
+	case errors.Is(err, lmsr.ErrInsufficientTokens):
+		return "Insufficient tokens available"
+	case errors.Is(err, lmsr.ErrNegativeQuantities):
+		return "Invalid market state: negative quantities"
+	case errors.Is(err, lmsr.ErrInvalidLiquidity):
+		return "Invalid liquidity parameter"
 	default:
 		return "An error occurred. Please try again."
 	}

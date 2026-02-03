@@ -6,11 +6,11 @@ import (
 )
 
 var (
-	ErrInvalidOutcome      = errors.New("invalid outcome: must be YES or NO")
-	ErrNegativeAmount      = errors.New("amount must be positive")
-	ErrInvalidLiquidity    = errors.New("liquidity parameter must be positive")
-	ErrNegativeQuantities  = errors.New("quantities must be non-negative")
-	ErrInsufficientTokens  = errors.New("cannot sell more than available")
+	ErrInvalidOutcome     = errors.New("invalid outcome: must be YES or NO")
+	ErrNegativeAmount     = errors.New("amount must be positive")
+	ErrInvalidLiquidity   = errors.New("liquidity parameter must be positive")
+	ErrNegativeQuantities = errors.New("quantities must be non-negative")
+	ErrInsufficientTokens = errors.New("cannot sell more than available")
 )
 
 // Calculator implements LMSR (Logarithmic Market Scoring Rule) pricing.
