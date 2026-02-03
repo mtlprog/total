@@ -8,9 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"time"
 
-	"github.com/mtlprog/total/internal/chart"
 	"github.com/mtlprog/total/internal/lmsr"
 	"github.com/mtlprog/total/internal/model"
 	"github.com/mtlprog/total/internal/service"
@@ -23,8 +21,8 @@ type MarketHandler struct {
 	marketService   *service.MarketService
 	tmpl            *template.Template
 	oraclePublicKey string
-	marketIDs       []string // In-memory list of known market IDs
-	marketIDsMu     sync.RWMutex
+	contractIDs     []string // In-memory list of known contract IDs
+	contractIDsMu   sync.RWMutex
 	logger          *slog.Logger
 }
 
@@ -39,7 +37,7 @@ func NewMarketHandler(
 		marketService:   marketService,
 		tmpl:            tmpl,
 		oraclePublicKey: oraclePublicKey,
-		marketIDs:       []string{},
+		contractIDs:     []string{},
 		logger:          logger,
 	}
 }
@@ -51,28 +49,23 @@ func (h *MarketHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /market/{id}", h.handleMarketDetail)
 	mux.HandleFunc("POST /market/{id}/quote", h.handleGetQuote)
 	mux.HandleFunc("POST /market/{id}/buy", h.handleBuildBuyTx)
-	mux.HandleFunc("GET /create", h.handleCreateForm)
-	mux.HandleFunc("POST /create", h.handleCreateMarket)
+	mux.HandleFunc("POST /market/{id}/sell", h.handleBuildSellTx)
 	mux.HandleFunc("POST /market/{id}/resolve", h.handleResolveMarket)
+	mux.HandleFunc("POST /market/{id}/claim", h.handleBuildClaimTx)
 	mux.HandleFunc("GET /health", h.handleHealth)
 }
 
-// handleListMarkets renders the list of all markets.
+// handleListMarkets renders the list of all known contracts.
 func (h *MarketHandler) handleListMarkets(w http.ResponseWriter, r *http.Request) {
-	h.marketIDsMu.RLock()
-	ids := make([]string, len(h.marketIDs))
-	copy(ids, h.marketIDs)
-	h.marketIDsMu.RUnlock()
+	h.contractIDsMu.RLock()
+	ids := make([]string, len(h.contractIDs))
+	copy(ids, h.contractIDs)
+	h.contractIDsMu.RUnlock()
 
-	markets, err := h.marketService.ListMarkets(r.Context(), ids)
-	if err != nil {
-		h.logger.Error("failed to list markets", "error", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		return
-	}
-
+	// Simple list of contract IDs for now
+	// TODO: Query contract state for each market
 	data := map[string]any{
-		"Markets":         markets,
+		"ContractIDs":     ids,
 		"OraclePublicKey": h.oraclePublicKey,
 	}
 
@@ -84,38 +77,15 @@ func (h *MarketHandler) handleListMarkets(w http.ResponseWriter, r *http.Request
 
 // handleMarketDetail renders a single market's detail page.
 func (h *MarketHandler) handleMarketDetail(w http.ResponseWriter, r *http.Request) {
-	marketID := r.PathValue("id")
-	if marketID == "" {
-		http.Error(w, "Market ID required", http.StatusBadRequest)
+	contractID := r.PathValue("id")
+	if contractID == "" {
+		http.Error(w, "Contract ID required", http.StatusBadRequest)
 		return
 	}
 
-	market, err := h.marketService.GetMarket(r.Context(), marketID)
-	if err != nil {
-		if err == service.ErrMarketNotFound {
-			http.Error(w, "Market not found", http.StatusNotFound)
-			return
-		}
-		h.logger.Error("failed to get market", "id", marketID, "error", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		return
-	}
-
-	// Get price history (log error but don't fail)
-	history, err := h.marketService.GetPriceHistory(r.Context(), marketID, 100)
-	if err != nil {
-		h.logger.Warn("failed to get price history", "id", marketID, "error", err)
-		history = nil
-	}
-
-	// Generate chart
-	priceChart := chart.RenderPriceChart(history, chart.DefaultWidth, chart.DefaultHeight)
-	barChart := chart.RenderSimpleBar(market.PriceYes, market.PriceNo, 50)
-
+	// TODO: Query contract state to get market details
 	data := map[string]any{
-		"Market":          market,
-		"PriceChart":      priceChart,
-		"BarChart":        barChart,
+		"ContractID":      contractID,
 		"OraclePublicKey": h.oraclePublicKey,
 	}
 
@@ -132,7 +102,7 @@ func (h *MarketHandler) handleGetQuote(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	marketID := r.PathValue("id")
+	contractID := r.PathValue("id")
 	outcomeStr := r.FormValue("outcome")
 	amountStr := r.FormValue("amount")
 
@@ -148,7 +118,7 @@ func (h *MarketHandler) handleGetQuote(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	quote, err := h.marketService.GetQuote(r.Context(), marketID, outcome, amount)
+	quote, err := h.marketService.GetQuote(r.Context(), contractID, outcome, amount)
 	if err != nil {
 		h.logger.Error("failed to get quote", "error", err)
 		http.Error(w, userFriendlyError(err), http.StatusBadRequest)
@@ -157,8 +127,8 @@ func (h *MarketHandler) handleGetQuote(w http.ResponseWriter, r *http.Request) {
 
 	// Return quote page
 	data := map[string]any{
-		"Quote":    quote,
-		"MarketID": marketID,
+		"Quote":      quote,
+		"ContractID": contractID,
 	}
 
 	if err := h.tmpl.Render(w, "quote", data); err != nil {
@@ -174,7 +144,7 @@ func (h *MarketHandler) handleBuildBuyTx(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	marketID := r.PathValue("id")
+	contractID := r.PathValue("id")
 	userPubKey := strings.TrimSpace(r.FormValue("user_public_key"))
 	outcomeStr := r.FormValue("outcome")
 	amountStr := r.FormValue("amount")
@@ -213,9 +183,9 @@ func (h *MarketHandler) handleBuildBuyTx(w http.ResponseWriter, r *http.Request)
 		slippage = s
 	}
 
-	req := model.BuyRequest{
+	req := service.BuyRequest{
 		UserPublicKey: userPubKey,
-		MarketID:      marketID,
+		ContractID:    contractID,
 		Outcome:       outcome,
 		ShareAmount:   amount,
 		Slippage:      slippage,
@@ -230,8 +200,8 @@ func (h *MarketHandler) handleBuildBuyTx(w http.ResponseWriter, r *http.Request)
 
 	// Render XDR result page
 	data := map[string]any{
-		"Result":   result,
-		"MarketID": marketID,
+		"Result":     result,
+		"ContractID": contractID,
 	}
 
 	if err := h.tmpl.Render(w, "transaction", data); err != nil {
@@ -240,84 +210,71 @@ func (h *MarketHandler) handleBuildBuyTx(w http.ResponseWriter, r *http.Request)
 	}
 }
 
-// handleCreateForm renders the market creation form.
-func (h *MarketHandler) handleCreateForm(w http.ResponseWriter, r *http.Request) {
-	data := map[string]any{
-		"OraclePublicKey":       h.oraclePublicKey,
-		"DefaultLiquidityParam": 100.0,
-	}
-
-	if err := h.tmpl.Render(w, "create", data); err != nil {
-		h.logger.Error("failed to render template", "error", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-	}
-}
-
-// handleCreateMarket creates a new market.
-func (h *MarketHandler) handleCreateMarket(w http.ResponseWriter, r *http.Request) {
+// handleBuildSellTx builds a transaction for selling tokens.
+func (h *MarketHandler) handleBuildSellTx(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "Invalid form data", http.StatusBadRequest)
 		return
 	}
 
-	// Don't HTML escape - templates handle escaping automatically
-	question := strings.TrimSpace(r.FormValue("question"))
-	description := strings.TrimSpace(r.FormValue("description"))
-	closeTimeStr := r.FormValue("close_time")
-	liquidityStr := r.FormValue("liquidity_param")
+	contractID := r.PathValue("id")
+	userPubKey := strings.TrimSpace(r.FormValue("user_public_key"))
+	outcomeStr := r.FormValue("outcome")
+	amountStr := r.FormValue("amount")
+	slippageStr := r.FormValue("slippage")
 
-	// Validate question
-	if question == "" {
-		http.Error(w, "Question is required", http.StatusBadRequest)
-		return
-	}
-	if len(question) > model.MaxQuestionLength {
-		http.Error(w, fmt.Sprintf("Question exceeds maximum length (%d characters)", model.MaxQuestionLength), http.StatusBadRequest)
-		return
-	}
-	if len(description) > model.MaxDescriptionLength {
-		http.Error(w, fmt.Sprintf("Description exceeds maximum length (%d characters)", model.MaxDescriptionLength), http.StatusBadRequest)
+	// Validate public key using Stellar SDK
+	if _, err := keypair.ParseAddress(userPubKey); err != nil {
+		http.Error(w, "Invalid Stellar public key", http.StatusBadRequest)
 		return
 	}
 
-	closeTime, err := time.Parse("2006-01-02T15:04", closeTimeStr)
+	outcome, err := model.ParseOutcome(outcomeStr)
 	if err != nil {
-		http.Error(w, "Invalid close time format", http.StatusBadRequest)
-		return
-	}
-	// Treat as UTC for consistent timezone handling
-	closeTime = closeTime.UTC()
-
-	liquidity, err := strconv.ParseFloat(liquidityStr, 64)
-	if err != nil || liquidity <= 0 {
-		http.Error(w, "Invalid liquidity parameter: must be a positive number", http.StatusBadRequest)
+		http.Error(w, "Invalid outcome: must be YES or NO", http.StatusBadRequest)
 		return
 	}
 
-	req := model.CreateMarketRequest{
-		Question:        question,
-		Description:     description,
-		CloseTime:       closeTime,
-		LiquidityParam:  liquidity,
-		OraclePublicKey: h.oraclePublicKey,
+	amount, err := strconv.ParseFloat(amountStr, 64)
+	if err != nil || amount <= 0 {
+		http.Error(w, "Invalid amount", http.StatusBadRequest)
+		return
 	}
 
-	result, marketID, err := h.marketService.CreateMarket(r.Context(), req)
+	// Parse slippage (default 1%, max 10%)
+	slippage := model.DefaultSlippage
+	if slippageStr != "" {
+		s, err := strconv.ParseFloat(slippageStr, 64)
+		if err != nil {
+			http.Error(w, "Invalid slippage: must be a number", http.StatusBadRequest)
+			return
+		}
+		if s <= 0 || s > model.MaxSlippage {
+			http.Error(w, fmt.Sprintf("Invalid slippage: must be between 0 and %.0f%% (e.g., 0.01 for 1%%)", model.MaxSlippage*100), http.StatusBadRequest)
+			return
+		}
+		slippage = s
+	}
+
+	req := service.SellRequest{
+		UserPublicKey: userPubKey,
+		ContractID:    contractID,
+		Outcome:       outcome,
+		ShareAmount:   amount,
+		Slippage:      slippage,
+	}
+
+	result, err := h.marketService.BuildSellTx(r.Context(), req)
 	if err != nil {
-		h.logger.Error("failed to create market", "error", err)
+		h.logger.Error("failed to build sell tx", "error", err)
 		http.Error(w, userFriendlyError(err), http.StatusBadRequest)
 		return
 	}
 
-	// Add market ID to our list (thread-safe)
-	h.marketIDsMu.Lock()
-	h.marketIDs = append(h.marketIDs, marketID)
-	h.marketIDsMu.Unlock()
-
+	// Render XDR result page
 	data := map[string]any{
-		"Result":   result,
-		"MarketID": marketID,
-		"IsCreate": true,
+		"Result":     result,
+		"ContractID": contractID,
 	}
 
 	if err := h.tmpl.Render(w, "transaction", data); err != nil {
@@ -333,7 +290,7 @@ func (h *MarketHandler) handleResolveMarket(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	marketID := r.PathValue("id")
+	contractID := r.PathValue("id")
 	outcomeStr := r.FormValue("outcome")
 
 	outcome, err := model.ParseOutcome(outcomeStr)
@@ -342,10 +299,10 @@ func (h *MarketHandler) handleResolveMarket(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	req := model.ResolveRequest{
-		MarketID:        marketID,
-		WinningOutcome:  outcome,
+	req := service.ResolveRequest{
 		OraclePublicKey: h.oraclePublicKey,
+		ContractID:      contractID,
+		WinningOutcome:  outcome,
 	}
 
 	result, err := h.marketService.BuildResolveTx(r.Context(), req)
@@ -356,8 +313,47 @@ func (h *MarketHandler) handleResolveMarket(w http.ResponseWriter, r *http.Reque
 	}
 
 	data := map[string]any{
-		"Result":   result,
-		"MarketID": marketID,
+		"Result":     result,
+		"ContractID": contractID,
+	}
+
+	if err := h.tmpl.Render(w, "transaction", data); err != nil {
+		h.logger.Error("failed to render template", "error", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+	}
+}
+
+// handleBuildClaimTx builds a transaction to claim winnings.
+func (h *MarketHandler) handleBuildClaimTx(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "Invalid form data", http.StatusBadRequest)
+		return
+	}
+
+	contractID := r.PathValue("id")
+	userPubKey := strings.TrimSpace(r.FormValue("user_public_key"))
+
+	// Validate public key using Stellar SDK
+	if _, err := keypair.ParseAddress(userPubKey); err != nil {
+		http.Error(w, "Invalid Stellar public key", http.StatusBadRequest)
+		return
+	}
+
+	req := service.ClaimRequest{
+		UserPublicKey: userPubKey,
+		ContractID:    contractID,
+	}
+
+	result, err := h.marketService.BuildClaimTx(r.Context(), req)
+	if err != nil {
+		h.logger.Error("failed to build claim tx", "error", err)
+		http.Error(w, userFriendlyError(err), http.StatusBadRequest)
+		return
+	}
+
+	data := map[string]any{
+		"Result":     result,
+		"ContractID": contractID,
 	}
 
 	if err := h.tmpl.Render(w, "transaction", data); err != nil {
@@ -372,19 +368,20 @@ func (h *MarketHandler) handleHealth(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprint(w, "OK")
 }
 
-// AddMarketID adds a market ID to the tracked list (thread-safe).
-func (h *MarketHandler) AddMarketID(id string) {
-	h.marketIDsMu.Lock()
-	defer h.marketIDsMu.Unlock()
-	h.marketIDs = append(h.marketIDs, id)
+// AddContractID adds a contract ID to the tracked list (thread-safe).
+func (h *MarketHandler) AddContractID(id string) {
+	h.contractIDsMu.Lock()
+	defer h.contractIDsMu.Unlock()
+	h.contractIDs = append(h.contractIDs, id)
 }
 
-// SetMarketIDs sets the list of tracked market IDs (thread-safe).
+// SetMarketIDs sets the list of tracked contract IDs (thread-safe).
+// Kept for backward compatibility with main.go
 func (h *MarketHandler) SetMarketIDs(ids []string) {
-	h.marketIDsMu.Lock()
-	defer h.marketIDsMu.Unlock()
-	h.marketIDs = make([]string, len(ids))
-	copy(h.marketIDs, ids)
+	h.contractIDsMu.Lock()
+	defer h.contractIDsMu.Unlock()
+	h.contractIDs = make([]string, len(ids))
+	copy(h.contractIDs, ids)
 }
 
 // userFriendlyError converts internal errors to user-friendly messages.
@@ -397,10 +394,6 @@ func userFriendlyError(err error) string {
 		return "Market has already been resolved"
 	case errors.Is(err, service.ErrInvalidOutcome):
 		return "Invalid outcome: must be YES or NO"
-	case errors.Is(err, service.ErrIPFSNotConfigured):
-		return "IPFS is not configured"
-	case errors.Is(err, service.ErrInvalidMarketData):
-		return "Market data is corrupted or invalid"
 	case errors.Is(err, model.ErrEmptyQuestion):
 		return "Question is required"
 	case errors.Is(err, model.ErrQuestionTooLong):

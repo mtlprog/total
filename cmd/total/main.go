@@ -12,9 +12,9 @@ import (
 
 	"github.com/mtlprog/total/internal/config"
 	"github.com/mtlprog/total/internal/handler"
-	"github.com/mtlprog/total/internal/ipfs"
 	"github.com/mtlprog/total/internal/logger"
 	"github.com/mtlprog/total/internal/service"
+	"github.com/mtlprog/total/internal/soroban"
 	"github.com/mtlprog/total/internal/stellar"
 	"github.com/mtlprog/total/internal/template"
 	"github.com/urfave/cli/v2"
@@ -68,24 +68,21 @@ func main() {
 						Required: true,
 					},
 					&cli.StringFlag{
-						Name:    "oracle-secret-key",
-						Usage:   "Oracle secret key for signing market transactions (S...)",
-						EnvVars: []string{"ORACLE_SECRET_KEY"},
+						Name:     "soroban-rpc-url",
+						Value:    config.DefaultSorobanRPCURL,
+						Usage:    "Soroban RPC URL",
+						EnvVars:  []string{"SOROBAN_RPC_URL"},
+						Required: true,
 					},
 					&cli.StringFlag{
-						Name:    "pinata-api-key",
-						Usage:   "Pinata API key for IPFS",
-						EnvVars: []string{"PINATA_API_KEY"},
-					},
-					&cli.StringFlag{
-						Name:    "pinata-secret",
-						Usage:   "Pinata API secret for IPFS",
-						EnvVars: []string{"PINATA_SECRET"},
+						Name:    "market-factory-contract",
+						Usage:   "Market factory contract ID (C...)",
+						EnvVars: []string{"MARKET_FACTORY_CONTRACT"},
 					},
 					&cli.StringSliceFlag{
-						Name:    "market-ids",
-						Usage:   "Known market IDs to track (comma-separated)",
-						EnvVars: []string{"MARKET_IDS"},
+						Name:    "contract-ids",
+						Usage:   "Known market contract IDs to track (comma-separated)",
+						EnvVars: []string{"CONTRACT_IDS"},
 					},
 				},
 				Action: runServe,
@@ -109,31 +106,26 @@ func runServe(c *cli.Context) error {
 	horizonURL := c.String("horizon-url")
 	networkPassphrase := c.String("network-passphrase")
 	oraclePublicKey := c.String("oracle-public-key")
-	oracleSecretKey := c.String("oracle-secret-key")
-	pinataAPIKey := c.String("pinata-api-key")
-	pinataSecret := c.String("pinata-secret")
-	marketIDs := c.StringSlice("market-ids")
+	sorobanRPCURL := c.String("soroban-rpc-url")
+	contractIDs := c.StringSlice("contract-ids")
 
-	// Initialize Stellar client
+	// Initialize Stellar client (for account lookups)
 	stellarClient, err := stellar.NewHorizonClient(horizonURL, networkPassphrase)
 	if err != nil {
 		return fmt.Errorf("failed to create Stellar client: %w", err)
 	}
 
-	// Initialize transaction builder
-	txBuilder, err := stellar.NewBuilder(stellarClient, networkPassphrase, config.DefaultBaseFee, oracleSecretKey)
-	if err != nil {
-		return fmt.Errorf("failed to create transaction builder: %w", err)
-	}
+	// Initialize Soroban client
+	sorobanClient := soroban.NewClient(sorobanRPCURL)
 
-	// Initialize IPFS client
-	ipfsClient := ipfs.NewClient(pinataAPIKey, pinataSecret)
+	// Initialize transaction builder
+	txBuilder := stellar.NewBuilder(stellarClient, networkPassphrase, config.DefaultBaseFee, sorobanClient)
 
 	// Initialize market service
 	marketService := service.NewMarketService(
 		stellarClient,
+		sorobanClient,
 		txBuilder,
-		ipfsClient,
 		oraclePublicKey,
 		slog.Default(),
 	)
@@ -152,9 +144,9 @@ func runServe(c *cli.Context) error {
 		slog.Default(),
 	)
 
-	// Set known market IDs
-	if len(marketIDs) > 0 {
-		marketHandler.SetMarketIDs(marketIDs)
+	// Set known contract IDs
+	if len(contractIDs) > 0 {
+		marketHandler.SetMarketIDs(contractIDs)
 	}
 
 	// Register routes
@@ -177,6 +169,7 @@ func runServe(c *cli.Context) error {
 		slog.Info("starting server",
 			"addr", "http://localhost:"+port,
 			"horizon", horizonURL,
+			"soroban_rpc", sorobanRPCURL,
 			"oracle", oraclePublicKey,
 		)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
