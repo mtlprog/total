@@ -129,6 +129,33 @@ contracts/
 - Soroban contracts: `cd contracts && cargo test`
 - LMSR math tests verify exp/ln accuracy and price calculations
 
+## Git Conventions
+
+Follow [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/):
+
+```
+<type>[optional scope]: <description>
+
+[optional body]
+
+[optional footer(s)]
+```
+
+Types:
+- `feat` - New feature
+- `fix` - Bug fix
+- `docs` - Documentation only
+- `refactor` - Code change that neither fixes a bug nor adds a feature
+- `test` - Adding or updating tests
+- `chore` - Maintenance tasks (deps, CI, etc.)
+
+Examples:
+- `feat: add LMSR prediction market`
+- `fix: handle pool underflow in sell()`
+- `docs: add Soroban error codes to CLAUDE.md`
+- `refactor: migrate to Soroban-only architecture`
+- `test: add Market.Validate() tests`
+
 ## Soroban Contract Functions
 
 ### LMSRMarket Contract
