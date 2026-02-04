@@ -5,10 +5,16 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 
 	"github.com/mtlprog/total/internal/model"
 	"github.com/mtlprog/total/internal/soroban"
 	"github.com/mtlprog/total/internal/stellar"
+)
+
+var (
+	// ErrAmountOverflow is returned when amount conversion would overflow int64.
+	ErrAmountOverflow = errors.New("amount overflow: value exceeds int64 range")
 )
 
 var (
@@ -17,6 +23,18 @@ var (
 	ErrInvalidOutcome   = errors.New("invalid outcome")
 	ErrInsufficientCost = errors.New("insufficient cost provided")
 )
+
+// safeFloatToInt64 converts a float64 to int64 with overflow checking.
+// Returns ErrAmountOverflow if the value is NaN, Inf, or exceeds int64 range.
+func safeFloatToInt64(f float64) (int64, error) {
+	if math.IsNaN(f) || math.IsInf(f, 0) {
+		return 0, fmt.Errorf("%w: invalid float value (NaN or Inf)", ErrAmountOverflow)
+	}
+	if f > float64(math.MaxInt64) || f < float64(math.MinInt64) {
+		return 0, fmt.Errorf("%w: value %g exceeds int64 range", ErrAmountOverflow, f)
+	}
+	return int64(f), nil
+}
 
 // MarketService handles prediction market operations via Soroban contracts.
 type MarketService struct {
@@ -86,24 +104,30 @@ type SellRequest struct {
 // BuildBuyTx builds a transaction for buying tokens.
 func (s *MarketService) BuildBuyTx(ctx context.Context, req BuyRequest) (*model.TransactionResult, error) {
 	if err := req.Validate(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("buy request validation failed: %w", err)
 	}
 
-	// Get quote to calculate max cost
+	// Convert amount to scaled int64 with overflow check
+	amount, err := safeFloatToInt64(req.ShareAmount * float64(soroban.ScaleFactor))
+	if err != nil {
+		return nil, fmt.Errorf("invalid share amount: %w", err)
+	}
+
 	quote, err := s.GetQuote(ctx, req.ContractID, req.Outcome, req.ShareAmount)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get quote: %w", err)
 	}
 
-	// Validate quote cost
 	if quote.Cost <= 0 {
 		return nil, fmt.Errorf("invalid quote cost: %d (expected positive value)", quote.Cost)
 	}
 
-	// Apply slippage
-	maxCost := int64(float64(quote.Cost) * (1 + req.Slippage))
-
-	amount := int64(req.ShareAmount * float64(soroban.ScaleFactor))
+	// Apply slippage with overflow check
+	maxCostFloat := float64(quote.Cost) * (1 + req.Slippage)
+	maxCost, err := safeFloatToInt64(maxCostFloat)
+	if err != nil {
+		return nil, fmt.Errorf("max cost calculation overflow: %w", err)
+	}
 
 	outcomeU32, err := soroban.OutcomeToU32(string(req.Outcome))
 	if err != nil {
@@ -137,24 +161,30 @@ func (s *MarketService) BuildBuyTx(ctx context.Context, req BuyRequest) (*model.
 // BuildSellTx builds a transaction for selling tokens.
 func (s *MarketService) BuildSellTx(ctx context.Context, req SellRequest) (*model.TransactionResult, error) {
 	if err := req.Validate(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("sell request validation failed: %w", err)
 	}
 
-	// Get sell quote for accurate return calculation
+	// Convert amount to scaled int64 with overflow check
+	amount, err := safeFloatToInt64(req.ShareAmount * float64(soroban.ScaleFactor))
+	if err != nil {
+		return nil, fmt.Errorf("invalid share amount: %w", err)
+	}
+
 	sellQuote, err := s.GetSellQuote(ctx, req.ContractID, req.Outcome, req.ShareAmount)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get sell quote: %w", err)
 	}
 
-	// Validate return amount
 	if sellQuote.ReturnAmount <= 0 {
 		return nil, fmt.Errorf("invalid sell return: %d (expected positive value)", sellQuote.ReturnAmount)
 	}
 
-	// Apply slippage protection
-	minReturn := int64(float64(sellQuote.ReturnAmount) * (1 - req.Slippage))
-
-	amount := int64(req.ShareAmount * float64(soroban.ScaleFactor))
+	// Apply slippage protection with overflow check
+	minReturnFloat := float64(sellQuote.ReturnAmount) * (1 - req.Slippage)
+	minReturn, err := safeFloatToInt64(minReturnFloat)
+	if err != nil {
+		return nil, fmt.Errorf("min return calculation overflow: %w", err)
+	}
 
 	outcomeU32, err := soroban.OutcomeToU32(string(req.Outcome))
 	if err != nil {
@@ -209,7 +239,7 @@ func (r *ResolveRequest) Validate() error {
 // BuildResolveTx builds a transaction to resolve a market.
 func (s *MarketService) BuildResolveTx(ctx context.Context, req ResolveRequest) (*model.TransactionResult, error) {
 	if err := req.Validate(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("resolve request validation failed: %w", err)
 	}
 
 	outcomeU32, err := soroban.OutcomeToU32(string(req.WinningOutcome))
@@ -259,7 +289,7 @@ func (r *ClaimRequest) Validate() error {
 // BuildClaimTx builds a transaction to claim winnings.
 func (s *MarketService) BuildClaimTx(ctx context.Context, req ClaimRequest) (*model.TransactionResult, error) {
 	if err := req.Validate(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("claim request validation failed: %w", err)
 	}
 
 	txXDR, err := s.txBuilder.BuildClaimTx(ctx, stellar.ClaimTxParams{
@@ -297,7 +327,10 @@ type SellQuote struct {
 
 // GetQuote gets a price quote from a market contract.
 func (s *MarketService) GetQuote(ctx context.Context, contractID string, outcome model.Outcome, amount float64) (*Quote, error) {
-	amountScaled := int64(amount * float64(soroban.ScaleFactor))
+	amountScaled, err := safeFloatToInt64(amount * float64(soroban.ScaleFactor))
+	if err != nil {
+		return nil, fmt.Errorf("invalid quote amount: %w", err)
+	}
 
 	outcomeU32, err := soroban.OutcomeToU32(string(outcome))
 	if err != nil {
@@ -363,7 +396,10 @@ func (s *MarketService) GetQuote(ctx context.Context, contractID string, outcome
 
 // GetSellQuote gets a sell price quote from a market contract.
 func (s *MarketService) GetSellQuote(ctx context.Context, contractID string, outcome model.Outcome, amount float64) (*SellQuote, error) {
-	amountScaled := int64(amount * float64(soroban.ScaleFactor))
+	amountScaled, err := safeFloatToInt64(amount * float64(soroban.ScaleFactor))
+	if err != nil {
+		return nil, fmt.Errorf("invalid sell quote amount: %w", err)
+	}
 
 	outcomeU32, err := soroban.OutcomeToU32(string(outcome))
 	if err != nil {

@@ -16,6 +16,7 @@ use crate::storage::{LN2_SCALED, SCALE_FACTOR};
 /// Maximum iterations for exp Taylor series approximation.
 /// 20 iterations provides approximately 7+ decimal digits of accuracy
 /// for inputs within the [-20, 20] range (scaled), matching SCALE_FACTOR precision.
+/// Each iteration uses checked arithmetic to detect overflow.
 const EXP_ITERATIONS: u32 = 20;
 
 /// Scaled exp function using Taylor series: e^x = 1 + x + x²/2! + x³/3! + ...
