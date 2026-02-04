@@ -6,7 +6,7 @@ mod storage;
 
 use error::MarketError;
 use soroban_sdk::{contract, contractimpl, token, Address, Env, String};
-use storage::{DataKey, OUTCOME_NO, OUTCOME_YES};
+use storage::{DataKey, OUTCOME_NO, OUTCOME_YES, BPS_DENOMINATOR, CLAIM_FEE_BPS};
 #[cfg(test)]
 use storage::SCALE_FACTOR;
 
@@ -332,15 +332,15 @@ impl LmsrMarket {
     }
 
     /// Claim winnings after market resolution.
-    /// Each winning token is redeemable for 1 unit of collateral (1:1 redemption).
-    /// This means the total payout equals the user's winning token balance.
+    /// Each winning token is redeemable for 1 unit of collateral (1:1 redemption),
+    /// minus a 2% fee that goes to the oracle.
     /// Note: Losing tokens have zero value and are not claimed.
     ///
     /// # Arguments
     /// * `user` - User claiming (must authorize)
     ///
     /// # Returns
-    /// Amount of collateral claimed
+    /// Amount of collateral claimed (after fee deduction)
     pub fn claim(env: Env, user: Address) -> Result<i128, MarketError> {
         Self::require_initialized(&env)?;
         Self::require_resolved(&env)?;
@@ -362,12 +362,23 @@ impl LmsrMarket {
         }
 
         // Each winning token is worth 1 unit of collateral
-        let payout = winning_balance;
+        let gross_payout = winning_balance;
+
+        // Calculate fee (2% = 200 basis points)
+        // Fee stays in pool and goes to oracle via withdraw_remaining
+        let fee = gross_payout
+            .checked_mul(CLAIM_FEE_BPS)
+            .ok_or(MarketError::Overflow)?
+            .checked_div(BPS_DENOMINATOR)
+            .ok_or(MarketError::Overflow)?;
+        let user_payout = gross_payout
+            .checked_sub(fee)
+            .ok_or(MarketError::Overflow)?;
 
         // Zero out user's balance
         env.storage().instance().set(&balance_key, &0i128);
 
-        // Update collateral pool
+        // Update collateral pool (only deduct user_payout, fee stays in pool)
         let pool: i128 = env
             .storage()
             .instance()
@@ -375,15 +386,15 @@ impl LmsrMarket {
             .ok_or(MarketError::StorageCorrupted)?;
 
         // Guard against pool underflow (should not happen with correct market operation)
-        if pool < payout {
+        if pool < user_payout {
             return Err(MarketError::InsufficientPool);
         }
 
         env.storage()
             .instance()
-            .set(&DataKey::CollateralPool, &(pool - payout));
+            .set(&DataKey::CollateralPool, &(pool - user_payout));
 
-        // Transfer collateral to user
+        // Transfer collateral to user (minus fee)
         // Note: token_client.transfer() may panic on failure (e.g., insufficient balance,
         // authorization issues). These panics are appropriate as they indicate contract
         // state inconsistency or external token contract issues.
@@ -393,9 +404,9 @@ impl LmsrMarket {
             .get(&DataKey::CollateralToken)
             .ok_or(MarketError::StorageCorrupted)?;
         let token_client = token::Client::new(&env, &collateral_token);
-        token_client.transfer(&env.current_contract_address(), &user, &payout);
+        token_client.transfer(&env.current_contract_address(), &user, &user_payout);
 
-        Ok(payout)
+        Ok(user_payout)
     }
 
     /// Withdraw remaining pool after market resolution (oracle only).
@@ -770,9 +781,10 @@ mod test {
         // Resolve market with YES winning
         client.resolve(&oracle, &0);
 
-        // User claims winnings
+        // User claims winnings (minus 2% fee)
         let payout = client.claim(&user);
-        assert_eq!(payout, amount);
+        let expected_payout = amount - (amount * CLAIM_FEE_BPS / BPS_DENOMINATOR);
+        assert_eq!(payout, expected_payout);
     }
 
     #[test]
@@ -1161,9 +1173,10 @@ mod test {
         // Resolve: YES wins
         client.resolve(&oracle, &0);
 
-        // Winner claims
+        // Winner claims (minus 2% fee)
         let payout = client.claim(&winner);
-        assert_eq!(payout, 10 * SCALE_FACTOR); // 1:1 redemption
+        let expected_payout = 10 * SCALE_FACTOR - (10 * SCALE_FACTOR * CLAIM_FEE_BPS / BPS_DENOMINATOR);
+        assert_eq!(payout, expected_payout); // 1:1 redemption minus 2% fee
 
         // Pool should have remaining funds (loser's money + part of initial funding)
         let (_, _, pool_after_claim, _) = client.get_state();
@@ -1526,12 +1539,64 @@ mod test {
         // Resolve with YES winning
         client.resolve(&oracle, &0);
 
-        // User1 (winner) claims successfully
+        // User1 (winner) claims successfully (minus 2% fee)
         let payout1 = client.claim(&user1);
-        assert_eq!(payout1, amount1);
+        let expected_payout1 = amount1 - (amount1 * CLAIM_FEE_BPS / BPS_DENOMINATOR);
+        assert_eq!(payout1, expected_payout1);
 
         // User2's balance should be 0 for winning outcome
         assert_eq!(client.get_balance(&user2, &0), 0);
+    }
+
+    // --- Claim fee tests ---
+
+    #[test]
+    fn test_claim_fee_calculation() {
+        let (env, contract_id, oracle, token_address) = setup_test();
+        let client = LmsrMarketClient::new(&env, &contract_id);
+
+        let b = 100 * SCALE_FACTOR;
+        let initial_funding = 70 * SCALE_FACTOR;
+
+        client.initialize(
+            &oracle,
+            &token_address,
+            &b,
+            &String::from_str(&env, "QmTest"),
+            &initial_funding,
+        );
+
+        let token_admin_client = StellarAssetClient::new(&env, &token_address);
+
+        let user = Address::generate(&env);
+        token_admin_client.mint(&user, &(100 * SCALE_FACTOR));
+
+        // Buy exactly 100 tokens (for easy math)
+        let amount = 100 * SCALE_FACTOR;
+        client.buy(&user, &0, &amount, &(100 * SCALE_FACTOR));
+
+        let (_, _, pool_before, _) = client.get_state();
+
+        // Resolve: YES wins
+        client.resolve(&oracle, &0);
+
+        // Claim and verify 2% fee
+        let payout = client.claim(&user);
+
+        // 2% of 100 = 2, so payout should be 98
+        let expected_fee = 2 * SCALE_FACTOR;
+        let expected_payout = amount - expected_fee;
+        assert_eq!(payout, expected_payout, "Expected 98% payout after 2% fee");
+
+        // Verify fee stayed in pool
+        let (_, _, pool_after, _) = client.get_state();
+        // Pool should have: pool_before - payout = pool_before - (amount - fee) = pool_before - amount + fee
+        // Since winning tokens are 1:1 redeemable from pool, the fee portion remains
+        assert_eq!(
+            pool_after,
+            pool_before - expected_payout,
+            "Fee should remain in pool"
+        );
     }
 
     // --- Sell all tokens to equilibrium ---

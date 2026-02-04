@@ -40,3 +40,11 @@ pub const SCALE_FACTOR: i128 = 10_000_000; // 10^7
 /// ln(2) ≈ 0.6931472
 /// Used for initial liquidity calculation: b * ln(2).
 pub const LN2_SCALED: i128 = 6_931_472;
+
+/// Claim fee in basis points (1 bp = 0.01%).
+/// 200 bp = 2% fee on winnings.
+/// Fee stays in pool and goes to oracle via withdraw_remaining.
+pub const CLAIM_FEE_BPS: i128 = 200;
+
+/// Basis points denominator (100% = 10000 bp).
+pub const BPS_DENOMINATOR: i128 = 10_000;
