@@ -127,6 +127,9 @@
     .footer-right { color: var(--text-muted); font-size: 0.75rem; }
     .back-link { display: inline-block; color: var(--text-dim); text-decoration: none; margin-bottom: 1.5rem; font-size: 0.9rem; }
     .back-link:hover { color: var(--accent); }
+    .trade-grid { display: grid; gap: 1.5rem; margin-bottom: 1.5rem; }
+    @media (min-width: 900px) { .trade-grid { grid-template-columns: 1fr 1fr; } }
+    .trade-grid .panel { margin-bottom: 0; }
     .error-box { background: rgba(255, 71, 87, 0.1); border: 1px solid var(--no); border-left: 3px solid var(--no); padding: 1rem; margin-bottom: 1.5rem; }
     .error-code { color: var(--no); font-weight: 700; margin-bottom: 0.5rem; }
     .error-message { color: var(--text); }

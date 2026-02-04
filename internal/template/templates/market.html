@@ -53,66 +53,68 @@
             {{end}}
 
             {{if not .Market.IsResolved}}
-            <div class="panel">
-                <h3 class="panel-title">Buy Outcome Tokens</h3>
-                <form method="POST" action="/market/{{.Market.ID}}/buy">
-                    <div class="form-group">
-                        <label>Your Stellar Public Key</label>
-                        <input type="text" name="user_public_key" placeholder="G..." required pattern="G[A-Z2-7]{55}">
-                    </div>
-
-                    <div class="form-group">
-                        <label>Outcome</label>
-                        <div class="radio-group">
-                            <label class="radio-option">
-                                <input type="radio" name="outcome" value="YES" required>
-                                <span class="text-yes font-bold">YES</span>
-                            </label>
-                            <label class="radio-option">
-                                <input type="radio" name="outcome" value="NO">
-                                <span class="text-no font-bold">NO</span>
-                            </label>
+            <div class="trade-grid">
+                <div class="panel">
+                    <h3 class="panel-title">Buy Outcome Tokens</h3>
+                    <form method="POST" action="/market/{{.Market.ID}}/buy">
+                        <div class="form-group">
+                            <label>Your Stellar Public Key</label>
+                            <input type="text" name="user_public_key" placeholder="G..." required pattern="G[A-Z2-7]{55}">
                         </div>
-                    </div>
 
-                    <div class="form-group">
-                        <label>Amount (tokens)</label>
-                        <input type="number" name="amount" min="0.01" step="0.01" value="10" required>
-                    </div>
-
-                    <button type="submit" class="btn btn-primary">Get Buy Transaction</button>
-                </form>
-            </div>
-
-            <div class="panel">
-                <h3 class="panel-title">Sell Outcome Tokens</h3>
-                <form method="POST" action="/market/{{.Market.ID}}/sell">
-                    <div class="form-group">
-                        <label>Your Stellar Public Key</label>
-                        <input type="text" name="user_public_key" placeholder="G..." required pattern="G[A-Z2-7]{55}">
-                    </div>
-
-                    <div class="form-group">
-                        <label>Outcome</label>
-                        <div class="radio-group">
-                            <label class="radio-option">
-                                <input type="radio" name="outcome" value="YES" required>
-                                <span class="text-yes font-bold">YES</span>
-                            </label>
-                            <label class="radio-option">
-                                <input type="radio" name="outcome" value="NO">
-                                <span class="text-no font-bold">NO</span>
-                            </label>
+                        <div class="form-group">
+                            <label>Outcome</label>
+                            <div class="radio-group">
+                                <label class="radio-option">
+                                    <input type="radio" name="outcome" value="YES" required>
+                                    <span class="text-yes font-bold">YES</span>
+                                </label>
+                                <label class="radio-option">
+                                    <input type="radio" name="outcome" value="NO">
+                                    <span class="text-no font-bold">NO</span>
+                                </label>
+                            </div>
                         </div>
-                    </div>
 
-                    <div class="form-group">
-                        <label>Amount (tokens to sell)</label>
-                        <input type="number" name="amount" min="0.01" step="0.01" value="10" required>
-                    </div>
+                        <div class="form-group">
+                            <label>Amount (tokens)</label>
+                            <input type="number" name="amount" min="0.01" step="0.01" value="10" required>
+                        </div>
 
-                    <button type="submit" class="btn">Get Sell Transaction</button>
-                </form>
+                        <button type="submit" class="btn btn-primary">Get Buy Transaction</button>
+                    </form>
+                </div>
+
+                <div class="panel">
+                    <h3 class="panel-title">Sell Outcome Tokens</h3>
+                    <form method="POST" action="/market/{{.Market.ID}}/sell">
+                        <div class="form-group">
+                            <label>Your Stellar Public Key</label>
+                            <input type="text" name="user_public_key" placeholder="G..." required pattern="G[A-Z2-7]{55}">
+                        </div>
+
+                        <div class="form-group">
+                            <label>Outcome</label>
+                            <div class="radio-group">
+                                <label class="radio-option">
+                                    <input type="radio" name="outcome" value="YES" required>
+                                    <span class="text-yes font-bold">YES</span>
+                                </label>
+                                <label class="radio-option">
+                                    <input type="radio" name="outcome" value="NO">
+                                    <span class="text-no font-bold">NO</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Amount (tokens to sell)</label>
+                            <input type="number" name="amount" min="0.01" step="0.01" value="10" required>
+                        </div>
+
+                        <button type="submit" class="btn">Get Sell Transaction</button>
+                    </form>
+                </div>
             </div>
             {{else}}
             <div class="panel">
