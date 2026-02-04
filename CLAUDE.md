@@ -117,6 +117,9 @@ The IPFS CID (hash) is stored on-chain via `metadata_hash` parameter.
 - Critical Stellar account fields (yes/no codes, liquidity) must error on decode failure, not log and continue
 - urfave/cli doesn't auto-load .env files; call `godotenv.Load()` before `app.Run()`
 - Go templates can't call pointer-receiver methods on values; pass `&struct` not `struct` to template data
+- Go templates: use composition (`{{template "partial" .}}`), NOT inheritance (`{{define "content"}}...{{template "base"}}`) - multiple templates defining same block name conflict in flat namespace
+- Display IDs/hashes as `first8...last8` format using `shortID()` function (handler + template)
+- Sticky footer: footer element outside `.container`, body uses `display: flex; flex-direction: column; min-height: 100%`
 
 ### Soroban
 - All amounts use fixed-point with SCALE_FACTOR = 10^7 (matches Stellar precision)
