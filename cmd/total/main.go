@@ -23,8 +23,12 @@ import (
 )
 
 func main() {
-	// Load .env file if present (ignore error if not found)
-	_ = godotenv.Load()
+	// Load .env file if present (ignore "file not found" errors, warn on other errors)
+	if err := godotenv.Load(); err != nil {
+		if !os.IsNotExist(err) {
+			slog.Warn("failed to load .env file", "error", err)
+		}
+	}
 
 	app := &cli.App{
 		Name:  "total",

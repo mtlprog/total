@@ -4,14 +4,23 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
+	"regexp"
 	"time"
 
 	"github.com/mtlprog/total/internal/config"
 	"github.com/samber/hot"
 )
+
+// ErrInvalidCID is returned when an IPFS CID has invalid format.
+var ErrInvalidCID = errors.New("invalid IPFS CID format")
+
+// ipfsCIDPattern matches IPFS CIDv0 (Qm...) and CIDv1 (b...) formats.
+var ipfsCIDPattern = regexp.MustCompile(`^(Qm[1-9A-HJ-NP-Za-km-z]{44}|b[A-Za-z2-7]{58,})$`)
 
 const (
 	// cacheTTL is the time-to-live for cached IPFS responses.
@@ -19,6 +28,18 @@ const (
 	// cacheSize is the maximum number of entries in the cache.
 	cacheSize = 1000
 )
+
+// ValidateCID validates an IPFS CID format.
+// Returns ErrInvalidCID if the CID is malformed.
+func ValidateCID(cid string) error {
+	if len(cid) < 10 || len(cid) > 100 {
+		return ErrInvalidCID
+	}
+	if !ipfsCIDPattern.MatchString(cid) {
+		return ErrInvalidCID
+	}
+	return nil
+}
 
 // Client provides IPFS operations via Pinata.
 type Client struct {
@@ -42,6 +63,7 @@ func NewClient(apiKey, apiSecret string) *Client {
 
 	// Create cache with TTL and background revalidation.
 	// Uses stale-while-revalidate pattern: serves cached data while refreshing in background.
+	// On revalidation errors, stale data is preserved (KeepOnError policy).
 	c.cache = hot.NewHotCache[string, []byte](hot.LRU, cacheSize).
 		WithTTL(cacheTTL).
 		WithRevalidation(cacheTTL, c.loadFromGateway).
@@ -52,24 +74,40 @@ func NewClient(apiKey, apiSecret string) *Client {
 }
 
 // loadFromGateway is the cache loader that fetches data from IPFS gateway.
+// Logs warnings for failed fetches but continues processing remaining hashes.
 func (c *Client) loadFromGateway(hashes []string) (map[string][]byte, error) {
 	result := make(map[string][]byte, len(hashes))
+	var failedCount int
 
 	for _, hash := range hashes {
-		data, err := c.fetchFromGateway(hash)
+		data, err := c.fetchFromGateway(context.Background(), hash)
 		if err != nil {
-			// Skip failed fetches, let cache handle missing keys
+			slog.Warn("cache revalidation fetch failed", "hash", hash, "error", err)
+			failedCount++
 			continue
 		}
 		result[hash] = data
+	}
+
+	if failedCount > 0 {
+		slog.Warn("cache revalidation completed with errors",
+			"total", len(hashes),
+			"failed", failedCount,
+			"succeeded", len(result))
 	}
 
 	return result, nil
 }
 
 // fetchFromGateway fetches raw JSON bytes from IPFS gateway.
-func (c *Client) fetchFromGateway(hash string) ([]byte, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+// Validates CID format to prevent SSRF attacks.
+func (c *Client) fetchFromGateway(ctx context.Context, hash string) ([]byte, error) {
+	// Validate CID format to prevent SSRF
+	if err := ValidateCID(hash); err != nil {
+		return nil, fmt.Errorf("invalid IPFS hash %q: %w", hash, err)
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
 	url := c.gatewayURL + hash
@@ -148,6 +186,7 @@ func (c *Client) PinJSON(ctx context.Context, data any) (string, error) {
 }
 
 // GetJSON retrieves JSON data from IPFS by hash with caching.
+// On cache miss, fetches from gateway and stores result for future requests.
 func (c *Client) GetJSON(ctx context.Context, hash string, v any) error {
 	// Try to get from cache (will trigger loader on miss)
 	data, found, err := c.cache.Get(hash)
@@ -157,7 +196,7 @@ func (c *Client) GetJSON(ctx context.Context, hash string, v any) error {
 
 	if !found {
 		// Cache miss and loader didn't find it, fetch directly
-		data, err = c.fetchFromGateway(hash)
+		data, err = c.fetchFromGateway(ctx, hash)
 		if err != nil {
 			return err
 		}
@@ -183,18 +222,27 @@ func (c *Client) CanPin() bool {
 }
 
 // Warmup pre-fetches IPFS data for the given hashes to populate the cache.
-// Runs in background and returns immediately. Errors are silently ignored.
+// Runs in background goroutine and returns immediately. Empty hashes are skipped.
+// Logs progress and errors. Note: goroutine may outlive caller.
 func (c *Client) Warmup(hashes []string) {
 	go func() {
+		ctx := context.Background()
+		var succeeded, failed int
+
 		for _, hash := range hashes {
 			if hash == "" {
 				continue
 			}
-			data, err := c.fetchFromGateway(hash)
+			data, err := c.fetchFromGateway(ctx, hash)
 			if err != nil {
+				slog.Warn("cache warmup fetch failed", "hash", hash, "error", err)
+				failed++
 				continue
 			}
 			c.cache.Set(hash, data)
+			succeeded++
 		}
+
+		slog.Info("cache warmup completed", "succeeded", succeeded, "failed", failed)
 	}()
 }
