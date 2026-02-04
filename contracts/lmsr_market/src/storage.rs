@@ -31,6 +31,12 @@ pub enum DataKey {
 pub const OUTCOME_YES: u32 = 0;
 pub const OUTCOME_NO: u32 = 1;
 
+/// Check if an outcome value is valid (YES=0 or NO=1).
+#[inline]
+pub fn is_valid_outcome(outcome: u32) -> bool {
+    outcome == OUTCOME_YES || outcome == OUTCOME_NO
+}
+
 /// Scale factor for fixed-point arithmetic.
 /// Uses 7 decimal places to match Stellar/Soroban native token precision,
 /// ensuring seamless conversion between contract amounts and on-chain balances.

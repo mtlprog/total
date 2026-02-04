@@ -69,6 +69,23 @@ func ValidateStellarPublicKey(key string) error {
 	return nil
 }
 
+// NewMarket creates a new Market with required fields validated.
+// ID must be a valid Soroban contract ID, liquidityParam must be positive.
+func NewMarket(id string, liquidityParam float64) (*Market, error) {
+	if id == "" {
+		return nil, errors.New("market ID is required")
+	}
+	if liquidityParam <= 0 {
+		return nil, ErrInvalidLiquidityParam
+	}
+	return &Market{
+		ID:             id,
+		LiquidityParam: liquidityParam,
+		PriceYes:       0.5,
+		PriceNo:        0.5,
+	}, nil
+}
+
 // Market represents a prediction market on Stellar.
 type Market struct {
 	ID              string     `json:"id"`               // Market contract ID (Soroban)

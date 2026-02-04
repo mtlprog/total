@@ -159,6 +159,11 @@ func (s *FactoryService) GetMarketStates(ctx context.Context, contractIDs []stri
 		}
 	}
 
+	// Return error when all fetches failed
+	if len(validStates) == 0 && len(contractIDs) > 0 && firstErr != nil {
+		return nil, fmt.Errorf("failed to fetch any market states: %w", firstErr)
+	}
+
 	return validStates, nil
 }
 
