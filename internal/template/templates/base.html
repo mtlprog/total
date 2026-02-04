@@ -127,6 +127,14 @@
     .footer-right { color: var(--text-muted); font-size: 0.75rem; }
     .back-link { display: inline-block; color: var(--text-dim); text-decoration: none; margin-bottom: 1.5rem; font-size: 0.9rem; }
     .back-link:hover { color: var(--accent); }
+    .header-row { display: flex; justify-content: space-between; align-items: center; }
+    .network-badge { display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.35rem 0.75rem; font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; border-radius: 2px; }
+    .network-badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; animation: pulse 2s ease-in-out infinite; }
+    .network-badge.testnet { background: rgba(255, 183, 77, 0.15); border: 1px solid var(--warning); color: var(--warning); }
+    .network-badge.testnet::before { background: var(--warning); box-shadow: 0 0 8px var(--warning); }
+    .network-badge.mainnet { background: rgba(0, 255, 159, 0.1); border: 1px solid var(--yes); color: var(--yes); }
+    .network-badge.mainnet::before { background: var(--yes); box-shadow: 0 0 8px var(--yes); }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
     .trade-grid { display: grid; gap: 1.5rem; margin-bottom: 1.5rem; }
     @media (min-width: 900px) { .trade-grid { grid-template-columns: 1fr 1fr; } }
     .trade-grid .panel { margin-bottom: 0; }
@@ -151,7 +159,14 @@
 
 {{define "header"}}
 <header class="header">
-    <h1 class="header-title"><a href="/">TOTAL</a></h1>
+    <div class="header-row">
+        <h1 class="header-title"><a href="/">TOTAL</a></h1>
+        {{if .Network}}
+        <span class="network-badge {{if eq .Network "testnet"}}testnet{{else}}mainnet{{end}}">
+            {{if eq .Network "testnet"}}Testnet{{else}}Mainnet{{end}}
+        </span>
+        {{end}}
+    </div>
 </header>
 {{end}}
 

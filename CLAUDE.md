@@ -107,6 +107,7 @@ The IPFS CID (hash) is stored on-chain via `metadata_hash` parameter.
 ## Gotchas
 
 ### General
+- **NEVER delete or modify files in `~/.config/stellar/identity/` or any credential/secret files** - these contain private keys that cannot be recovered
 - `.gitignore`: use `/total` not `total` to avoid ignoring `cmd/total/`
 - Stellar SDK moved from `stellar/go` to `stellar/go-stellar-sdk` (Dec 2025)
 - Use `errors.Is()` not `==` for error comparison (errors may be wrapped with `%w`)
