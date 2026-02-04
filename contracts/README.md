@@ -306,9 +306,10 @@ stellar contract invoke \
   -- \
   claim \
   --user GAMENVJIEUAD7U6ZB5BTPE4ENCWHZJRT3NJDS2S3JSIJGY76UGMUSGEU
-# Output: "50000000"
-# Event: transfer 50000000 stroops from contract to user
-# Result: User claimed 5 XLM for 5 winning YES tokens
+# Output: "49000000"
+# Event: transfer 49000000 stroops from contract to user
+# Result: User claimed 4.9 XLM (5 XLM - 2% fee) for 5 winning YES tokens
+# Note: 2% claim fee (0.1 XLM) stays in pool for oracle to withdraw
 ```
 
 ### Withdraw Remaining Pool (Oracle Only)
@@ -405,7 +406,7 @@ stellar contract invoke \
 | `buy` | Buy outcome tokens | User | `i128` (actual cost) |
 | `sell` | Sell outcome tokens | User | `i128` (actual return) |
 | `resolve` | Resolve market | Oracle | `()` |
-| `claim` | Claim winnings | User | `i128` (amount claimed) |
+| `claim` | Claim winnings (2% fee deducted) | User | `i128` (amount after fee) |
 | `get_price` | Get current price | None | `i128` (scaled 0-10^7) |
 | `get_quote` | Get buy quote | None | `(i128, i128)` (cost, price_after) |
 | `get_sell_quote` | Get sell quote | None | `(i128, i128)` (return, price_after) |
