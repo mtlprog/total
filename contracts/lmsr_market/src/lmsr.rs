@@ -40,7 +40,9 @@ fn exp_scaled(x: i128) -> Result<i128, MarketError> {
     for n in 1..=EXP_ITERATIONS {
         // term = term * x / (n * SCALE_FACTOR)
         term = term.checked_mul(x).ok_or(MarketError::Overflow)?;
-        term = term.checked_div(n as i128 * SCALE_FACTOR).ok_or(MarketError::Overflow)?;
+        term = term
+            .checked_div(n as i128 * SCALE_FACTOR)
+            .ok_or(MarketError::Overflow)?;
 
         result = result.checked_add(term).ok_or(MarketError::Overflow)?;
 
@@ -118,7 +120,9 @@ fn ln_scaled(x: i128) -> Result<i128, MarketError> {
 
     // Add n * ln(2)
     let adjustment = n.checked_mul(LN2_SCALED).ok_or(MarketError::Overflow)?;
-    result = result.checked_add(adjustment).ok_or(MarketError::Overflow)?;
+    result = result
+        .checked_add(adjustment)
+        .ok_or(MarketError::Overflow)?;
 
     Ok(result)
 }
@@ -131,10 +135,16 @@ pub fn cost(q_yes: i128, q_no: i128, b: i128) -> Result<i128, MarketError> {
     }
 
     // Calculate qYes/b and qNo/b (result still scaled)
-    let q_yes_over_b = q_yes.checked_mul(SCALE_FACTOR).ok_or(MarketError::Overflow)?
-        .checked_div(b).ok_or(MarketError::Overflow)?;
-    let q_no_over_b = q_no.checked_mul(SCALE_FACTOR).ok_or(MarketError::Overflow)?
-        .checked_div(b).ok_or(MarketError::Overflow)?;
+    let q_yes_over_b = q_yes
+        .checked_mul(SCALE_FACTOR)
+        .ok_or(MarketError::Overflow)?
+        .checked_div(b)
+        .ok_or(MarketError::Overflow)?;
+    let q_no_over_b = q_no
+        .checked_mul(SCALE_FACTOR)
+        .ok_or(MarketError::Overflow)?
+        .checked_div(b)
+        .ok_or(MarketError::Overflow)?;
 
     // Use log-sum-exp trick for numerical stability:
     // ln(e^a + e^b) = max(a,b) + ln(1 + e^(min-max))
@@ -143,14 +153,19 @@ pub fn cost(q_yes: i128, q_no: i128, b: i128) -> Result<i128, MarketError> {
 
     let diff = min_q.checked_sub(max_q).ok_or(MarketError::Overflow)?;
     let exp_diff = exp_scaled(diff)?;
-    let sum = SCALE_FACTOR.checked_add(exp_diff).ok_or(MarketError::Overflow)?;
+    let sum = SCALE_FACTOR
+        .checked_add(exp_diff)
+        .ok_or(MarketError::Overflow)?;
     let ln_sum = ln_scaled(sum)?;
 
     let inside = max_q.checked_add(ln_sum).ok_or(MarketError::Overflow)?;
 
     // C = b * inside / SCALE_FACTOR (to maintain proper scaling)
-    let result = b.checked_mul(inside).ok_or(MarketError::Overflow)?
-        .checked_div(SCALE_FACTOR).ok_or(MarketError::Overflow)?;
+    let result = b
+        .checked_mul(inside)
+        .ok_or(MarketError::Overflow)?
+        .checked_div(SCALE_FACTOR)
+        .ok_or(MarketError::Overflow)?;
 
     Ok(result)
 }
@@ -171,12 +186,22 @@ pub fn calculate_buy_cost(
     let cost_before = cost(q_yes, q_no, b)?;
 
     let cost_after = match outcome {
-        0 => cost(q_yes.checked_add(amount).ok_or(MarketError::Overflow)?, q_no, b)?,
-        1 => cost(q_yes, q_no.checked_add(amount).ok_or(MarketError::Overflow)?, b)?,
+        0 => cost(
+            q_yes.checked_add(amount).ok_or(MarketError::Overflow)?,
+            q_no,
+            b,
+        )?,
+        1 => cost(
+            q_yes,
+            q_no.checked_add(amount).ok_or(MarketError::Overflow)?,
+            b,
+        )?,
         _ => return Err(MarketError::InvalidOutcome),
     };
 
-    cost_after.checked_sub(cost_before).ok_or(MarketError::Overflow)
+    cost_after
+        .checked_sub(cost_before)
+        .ok_or(MarketError::Overflow)
 }
 
 /// Calculate the return from selling `amount` of `outcome` tokens.
@@ -199,32 +224,53 @@ pub fn calculate_sell_return(
             if q_yes < amount {
                 return Err(MarketError::InsufficientBalance);
             }
-            cost(q_yes.checked_sub(amount).ok_or(MarketError::Overflow)?, q_no, b)?
+            cost(
+                q_yes.checked_sub(amount).ok_or(MarketError::Overflow)?,
+                q_no,
+                b,
+            )?
         }
         1 => {
             if q_no < amount {
                 return Err(MarketError::InsufficientBalance);
             }
-            cost(q_yes, q_no.checked_sub(amount).ok_or(MarketError::Overflow)?, b)?
+            cost(
+                q_yes,
+                q_no.checked_sub(amount).ok_or(MarketError::Overflow)?,
+                b,
+            )?
         }
         _ => return Err(MarketError::InvalidOutcome),
     };
 
-    cost_before.checked_sub(cost_after).ok_or(MarketError::Overflow)
+    cost_before
+        .checked_sub(cost_after)
+        .ok_or(MarketError::Overflow)
 }
 
 /// Calculate the current price (probability) of an outcome.
 /// Returns price scaled by SCALE_FACTOR (0 to SCALE_FACTOR represents 0 to 1).
-pub fn calculate_price(q_yes: i128, q_no: i128, outcome: u32, b: i128) -> Result<i128, MarketError> {
+pub fn calculate_price(
+    q_yes: i128,
+    q_no: i128,
+    outcome: u32,
+    b: i128,
+) -> Result<i128, MarketError> {
     if b <= 0 {
         return Err(MarketError::InvalidLiquidity);
     }
 
     // P(yes) = e^(qYes/b) / (e^(qYes/b) + e^(qNo/b))
-    let q_yes_over_b = q_yes.checked_mul(SCALE_FACTOR).ok_or(MarketError::Overflow)?
-        .checked_div(b).ok_or(MarketError::Overflow)?;
-    let q_no_over_b = q_no.checked_mul(SCALE_FACTOR).ok_or(MarketError::Overflow)?
-        .checked_div(b).ok_or(MarketError::Overflow)?;
+    let q_yes_over_b = q_yes
+        .checked_mul(SCALE_FACTOR)
+        .ok_or(MarketError::Overflow)?
+        .checked_div(b)
+        .ok_or(MarketError::Overflow)?;
+    let q_no_over_b = q_no
+        .checked_mul(SCALE_FACTOR)
+        .ok_or(MarketError::Overflow)?
+        .checked_div(b)
+        .ok_or(MarketError::Overflow)?;
 
     let exp_yes = exp_scaled(q_yes_over_b)?;
     let exp_no = exp_scaled(q_no_over_b)?;
@@ -235,10 +281,16 @@ pub fn calculate_price(q_yes: i128, q_no: i128, outcome: u32, b: i128) -> Result
     }
 
     match outcome {
-        0 => Ok(exp_yes.checked_mul(SCALE_FACTOR).ok_or(MarketError::Overflow)?
-            .checked_div(sum).ok_or(MarketError::Overflow)?),
-        1 => Ok(exp_no.checked_mul(SCALE_FACTOR).ok_or(MarketError::Overflow)?
-            .checked_div(sum).ok_or(MarketError::Overflow)?),
+        0 => Ok(exp_yes
+            .checked_mul(SCALE_FACTOR)
+            .ok_or(MarketError::Overflow)?
+            .checked_div(sum)
+            .ok_or(MarketError::Overflow)?),
+        1 => Ok(exp_no
+            .checked_mul(SCALE_FACTOR)
+            .ok_or(MarketError::Overflow)?
+            .checked_div(sum)
+            .ok_or(MarketError::Overflow)?),
         _ => Err(MarketError::InvalidOutcome),
     }
 }
@@ -285,8 +337,16 @@ mod tests {
         let price_yes = calculate_price(0, 0, 0, b).unwrap();
         let price_no = calculate_price(0, 0, 1, b).unwrap();
 
-        assert!(price_yes > 4_900_000 && price_yes < 5_100_000, "price_yes = {}", price_yes);
-        assert!(price_no > 4_900_000 && price_no < 5_100_000, "price_no = {}", price_no);
+        assert!(
+            price_yes > 4_900_000 && price_yes < 5_100_000,
+            "price_yes = {}",
+            price_yes
+        );
+        assert!(
+            price_no > 4_900_000 && price_no < 5_100_000,
+            "price_no = {}",
+            price_no
+        );
     }
 
     #[test]
@@ -359,7 +419,13 @@ mod tests {
         assert!(matches!(result, Err(MarketError::InvalidOutcome)));
 
         // Invalid outcome in calculate_sell_return
-        let result = calculate_sell_return(100 * SCALE_FACTOR, 100 * SCALE_FACTOR, 10 * SCALE_FACTOR, 99, b);
+        let result = calculate_sell_return(
+            100 * SCALE_FACTOR,
+            100 * SCALE_FACTOR,
+            10 * SCALE_FACTOR,
+            99,
+            b,
+        );
         assert!(matches!(result, Err(MarketError::InvalidOutcome)));
 
         // Invalid outcome in calculate_price
@@ -385,11 +451,13 @@ mod tests {
         let b = 100 * SCALE_FACTOR;
 
         // Try to sell more YES than exists
-        let result = calculate_sell_return(5 * SCALE_FACTOR, 10 * SCALE_FACTOR, 10 * SCALE_FACTOR, 0, b);
+        let result =
+            calculate_sell_return(5 * SCALE_FACTOR, 10 * SCALE_FACTOR, 10 * SCALE_FACTOR, 0, b);
         assert!(matches!(result, Err(MarketError::InsufficientBalance)));
 
         // Try to sell more NO than exists
-        let result = calculate_sell_return(10 * SCALE_FACTOR, 5 * SCALE_FACTOR, 10 * SCALE_FACTOR, 1, b);
+        let result =
+            calculate_sell_return(10 * SCALE_FACTOR, 5 * SCALE_FACTOR, 10 * SCALE_FACTOR, 1, b);
         assert!(matches!(result, Err(MarketError::InsufficientBalance)));
     }
 }

@@ -6,9 +6,9 @@ mod storage;
 
 use error::MarketError;
 use soroban_sdk::{contract, contractimpl, token, Address, Env, String};
-use storage::{DataKey, is_valid_outcome, OUTCOME_YES, OUTCOME_NO, BPS_DENOMINATOR, CLAIM_FEE_BPS};
 #[cfg(test)]
 use storage::SCALE_FACTOR;
+use storage::{is_valid_outcome, DataKey, BPS_DENOMINATOR, CLAIM_FEE_BPS, OUTCOME_NO, OUTCOME_YES};
 
 /// LMSR Prediction Market Contract
 ///
@@ -36,8 +36,15 @@ impl LmsrMarket {
         metadata_hash: String,
         initial_funding: i128,
     ) {
-        Self::initialize(env, oracle, collateral_token, liquidity_param, metadata_hash, initial_funding)
-            .expect("initialization failed");
+        Self::initialize(
+            env,
+            oracle,
+            collateral_token,
+            liquidity_param,
+            metadata_hash,
+            initial_funding,
+        )
+        .expect("initialization failed");
     }
 
     /// Initialize the market with oracle, collateral token, liquidity parameter, and metadata.
@@ -389,9 +396,7 @@ impl LmsrMarket {
             .ok_or(MarketError::Overflow)?
             .checked_div(BPS_DENOMINATOR)
             .ok_or(MarketError::Overflow)?;
-        let user_payout = gross_payout
-            .checked_sub(fee)
-            .ok_or(MarketError::Overflow)?;
+        let user_payout = gross_payout.checked_sub(fee).ok_or(MarketError::Overflow)?;
 
         // Zero out user's balance
         env.storage().instance().set(&balance_key, &0i128);
@@ -465,7 +470,9 @@ impl LmsrMarket {
         }
 
         // Zero out the pool
-        env.storage().instance().set(&DataKey::CollateralPool, &0i128);
+        env.storage()
+            .instance()
+            .set(&DataKey::CollateralPool, &0i128);
 
         // Transfer remaining pool to oracle
         let collateral_token: Address = env
@@ -728,7 +735,10 @@ mod test {
     }
 
     /// Set up with custom liquidity and funding params.
-    fn setup_test_with_params(liquidity_param: i128, initial_funding: i128) -> (Env, Address, Address, Address) {
+    fn setup_test_with_params(
+        liquidity_param: i128,
+        initial_funding: i128,
+    ) -> (Env, Address, Address, Address) {
         let env = Env::default();
         env.mock_all_auths();
 
@@ -1058,7 +1068,8 @@ mod test {
 
         // Winner claims (minus 2% fee)
         let payout = client.claim(&winner);
-        let expected_payout = 10 * SCALE_FACTOR - (10 * SCALE_FACTOR * CLAIM_FEE_BPS / BPS_DENOMINATOR);
+        let expected_payout =
+            10 * SCALE_FACTOR - (10 * SCALE_FACTOR * CLAIM_FEE_BPS / BPS_DENOMINATOR);
         assert_eq!(payout, expected_payout); // 1:1 redemption minus 2% fee
 
         // Pool should have remaining funds (loser's money + part of initial funding)
