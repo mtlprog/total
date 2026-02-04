@@ -10,8 +10,10 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/joho/godotenv"
 	"github.com/mtlprog/total/internal/config"
 	"github.com/mtlprog/total/internal/handler"
+	"github.com/mtlprog/total/internal/ipfs"
 	"github.com/mtlprog/total/internal/logger"
 	"github.com/mtlprog/total/internal/service"
 	"github.com/mtlprog/total/internal/soroban"
@@ -21,6 +23,9 @@ import (
 )
 
 func main() {
+	// Load .env file if present (ignore error if not found)
+	_ = godotenv.Load()
+
 	app := &cli.App{
 		Name:  "total",
 		Usage: "Stellar prediction market platform",
@@ -79,10 +84,15 @@ func main() {
 						Usage:   "Market factory contract ID (C...)",
 						EnvVars: []string{"MARKET_FACTORY_CONTRACT"},
 					},
-					&cli.StringSliceFlag{
-						Name:    "contract-ids",
-						Usage:   "Known market contract IDs to track (comma-separated)",
-						EnvVars: []string{"CONTRACT_IDS"},
+					&cli.StringFlag{
+						Name:    "pinata-api-key",
+						Usage:   "Pinata API key for IPFS",
+						EnvVars: []string{"PINATA_API_KEY"},
+					},
+					&cli.StringFlag{
+						Name:    "pinata-api-secret",
+						Usage:   "Pinata API secret for IPFS",
+						EnvVars: []string{"PINATA_API_SECRET"},
 					},
 				},
 				Action: runServe,
@@ -107,7 +117,9 @@ func runServe(c *cli.Context) error {
 	networkPassphrase := c.String("network-passphrase")
 	oraclePublicKey := c.String("oracle-public-key")
 	sorobanRPCURL := c.String("soroban-rpc-url")
-	contractIDs := c.StringSlice("contract-ids")
+	factoryContract := c.String("market-factory-contract")
+	pinataAPIKey := c.String("pinata-api-key")
+	pinataAPISecret := c.String("pinata-api-secret")
 
 	// Initialize Stellar client (for account lookups)
 	stellarClient, err := stellar.NewHorizonClient(horizonURL, networkPassphrase)
@@ -130,6 +142,31 @@ func runServe(c *cli.Context) error {
 		slog.Default(),
 	)
 
+	// Initialize factory service (optional, only if factory contract is configured)
+	var factoryService *service.FactoryService
+	if factoryContract != "" {
+		factoryService = service.NewFactoryService(
+			sorobanClient,
+			stellarClient,
+			txBuilder,
+			factoryContract,
+			oraclePublicKey,
+			slog.Default(),
+		)
+		slog.Info("factory service enabled", "contract", factoryContract)
+	} else {
+		slog.Warn("factory contract not configured, market listing disabled")
+	}
+
+	// Initialize IPFS client (optional)
+	var ipfsClient *ipfs.Client
+	if pinataAPIKey != "" && pinataAPISecret != "" {
+		ipfsClient = ipfs.NewClient(pinataAPIKey, pinataAPISecret)
+		slog.Info("IPFS client enabled")
+	} else {
+		slog.Info("IPFS client disabled (no Pinata credentials)")
+	}
+
 	// Initialize templates
 	tmpl, err := template.New()
 	if err != nil {
@@ -139,15 +176,12 @@ func runServe(c *cli.Context) error {
 	// Initialize handler
 	marketHandler := handler.NewMarketHandler(
 		marketService,
+		factoryService,
+		ipfsClient,
 		tmpl,
 		oraclePublicKey,
 		slog.Default(),
 	)
-
-	// Set known contract IDs
-	if len(contractIDs) > 0 {
-		marketHandler.SetMarketIDs(contractIDs)
-	}
 
 	// Register routes
 	mux := http.NewServeMux()
@@ -171,6 +205,7 @@ func runServe(c *cli.Context) error {
 			"horizon", horizonURL,
 			"soroban_rpc", sorobanRPCURL,
 			"oracle", oraclePublicKey,
+			"factory", factoryContract,
 		)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			serverErr <- err

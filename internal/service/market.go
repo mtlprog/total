@@ -313,6 +313,50 @@ func (s *MarketService) BuildClaimTx(ctx context.Context, req ClaimRequest) (*mo
 	}, nil
 }
 
+// WithdrawRequest contains data for oracle withdrawing remaining pool.
+type WithdrawRequest struct {
+	OraclePublicKey string
+	ContractID      string
+}
+
+// Validate validates the withdraw request.
+func (r *WithdrawRequest) Validate() error {
+	if err := model.ValidateStellarPublicKey(r.OraclePublicKey); err != nil {
+		return err
+	}
+	if err := soroban.ValidateContractID(r.ContractID); err != nil {
+		return err
+	}
+	return nil
+}
+
+// BuildWithdrawTx builds a transaction to withdraw remaining pool.
+func (s *MarketService) BuildWithdrawTx(ctx context.Context, req WithdrawRequest) (*model.TransactionResult, error) {
+	if err := req.Validate(); err != nil {
+		return nil, fmt.Errorf("withdraw request validation failed: %w", err)
+	}
+
+	txXDR, err := s.txBuilder.BuildWithdrawTx(ctx, stellar.WithdrawTxParams{
+		OraclePublicKey: req.OraclePublicKey,
+		ContractID:      req.ContractID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to build transaction: %w", err)
+	}
+
+	preparedXDR, err := s.txBuilder.SimulateAndPrepareTx(ctx, txXDR)
+	if err != nil {
+		return nil, fmt.Errorf("failed to simulate transaction: %w", err)
+	}
+
+	return &model.TransactionResult{
+		XDR:         preparedXDR,
+		Description: "Withdraw remaining pool",
+		SignWith:    req.OraclePublicKey,
+		SubmitURL:   s.sorobanClient.RPCURL(),
+	}, nil
+}
+
 // Quote represents a price quote for buying from the contract.
 type Quote struct {
 	Cost       int64   // Scaled by 10^7

@@ -236,11 +236,41 @@
                 <input type="number" name="amount" min="0.01" step="0.01" value="10" required>
             </div>
 
-            <button type="submit" class="btn">Get Transaction XDR</button>
+            <button type="submit" class="btn">Get Buy Transaction XDR</button>
         </form>
     </div>
 
-    {{if eq .Market.ID .OraclePublicKey}}
+    <div class="section">
+        <div class="section-title">Sell Outcome Tokens</div>
+        <form method="POST" action="/market/{{.Market.ID}}/sell">
+            <div class="form-group">
+                <label>Your Stellar Public Key</label>
+                <input type="text" name="user_public_key" placeholder="G..." required pattern="G[A-Z2-7]{55}">
+            </div>
+
+            <div class="form-group">
+                <label>Outcome</label>
+                <div class="radio-group">
+                    <label class="radio-option">
+                        <input type="radio" name="outcome" value="YES" required>
+                        <span class="price-yes">YES</span>
+                    </label>
+                    <label class="radio-option">
+                        <input type="radio" name="outcome" value="NO">
+                        <span class="price-no">NO</span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Amount (tokens to sell)</label>
+                <input type="number" name="amount" min="0.01" step="0.01" value="10" required>
+            </div>
+
+            <button type="submit" class="btn">Get Sell Transaction XDR</button>
+        </form>
+    </div>
+
     <div class="section">
         <div class="section-title">Oracle: Resolve Market</div>
         <form method="POST" action="/market/{{.Market.ID}}/resolve">
@@ -260,7 +290,26 @@
             <button type="submit" class="btn">Generate Resolve Transaction</button>
         </form>
     </div>
-    {{end}}
+    {{else}}
+    <div class="section">
+        <div class="section-title">Claim Winnings</div>
+        <form method="POST" action="/market/{{.Market.ID}}/claim">
+            <div class="form-group">
+                <label>Your Stellar Public Key</label>
+                <input type="text" name="user_public_key" placeholder="G..." required pattern="G[A-Z2-7]{55}">
+            </div>
+            <button type="submit" class="btn">Get Claim Transaction XDR</button>
+        </form>
+    </div>
+
+    <div class="section">
+        <div class="section-title">Oracle: Withdraw Remaining Pool</div>
+        <p class="description">After all claims are processed, the oracle can withdraw any remaining funds from the pool (unclaimed winnings, fees, and losing bets).</p>
+        <form method="POST" action="/market/{{.Market.ID}}/withdraw">
+            <input type="hidden" name="oracle_public_key" value="{{.OraclePublicKey}}">
+            <button type="submit" class="btn">Get Withdraw Transaction XDR</button>
+        </form>
+    </div>
     {{end}}
 
     <div class="section meta">

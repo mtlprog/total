@@ -96,7 +96,7 @@ func (ci *ContractInvoker) BuildInvokeTx(ctx context.Context, params InvokeParam
 			Operations:           []txnbuild.Operation{op},
 			BaseFee:              ci.baseFee,
 			Preconditions: txnbuild.Preconditions{
-				TimeBounds: txnbuild.NewTimeout(300),
+				TimeBounds: txnbuild.NewInfiniteTimeout(),
 			},
 		},
 	)
@@ -320,6 +320,15 @@ func EncodeBool(b bool) xdr.ScVal {
 	}
 }
 
+// EncodeBytes32 encodes a 32-byte array to SCVal Bytes.
+func EncodeBytes32(b [32]byte) xdr.ScVal {
+	bytes := xdr.ScBytes(b[:])
+	return xdr.ScVal{
+		Type:  xdr.ScValTypeScvBytes,
+		Bytes: &bytes,
+	}
+}
+
 // --- SCVal decoding helpers ---
 
 // DecodeI128 decodes an SCVal I128 to int64.
@@ -373,6 +382,14 @@ func DecodeVec(val xdr.ScVal) ([]xdr.ScVal, error) {
 	result := make([]xdr.ScVal, len(vec))
 	copy(result, vec)
 	return result, nil
+}
+
+// DecodeString decodes an SCVal String.
+func DecodeString(val xdr.ScVal) (string, error) {
+	if val.Type != xdr.ScValTypeScvString || val.Str == nil {
+		return "", fmt.Errorf("not a String value, got type %v", val.Type)
+	}
+	return string(*val.Str), nil
 }
 
 // DecodeAddress decodes an SCVal Address to string.

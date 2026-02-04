@@ -127,16 +127,7 @@ func (m *Market) Validate() error {
 	return nil
 }
 
-// MarketMetadata is stored in IPFS.
-type MarketMetadata struct {
-	Question        string    `json:"question"`
-	Description     string    `json:"description"`
-	CloseTime       time.Time `json:"close_time"`
-	LiquidityParam  float64   `json:"liquidity_param"`
-	CollateralAsset string    `json:"collateral_asset"`
-	CreatedBy       string    `json:"created_by"`
-	CreatedAt       time.Time `json:"created_at"`
-}
+// MarketMetadata is defined in metadata.go
 
 // PriceQuote represents a quote for buying outcome tokens.
 type PriceQuote struct {
