@@ -73,6 +73,12 @@
                 </form>
             </div>
 
+            {{if .MarketsError}}
+            <div class="panel">
+                <div class="warning">{{.MarketsError}}</div>
+            </div>
+            {{end}}
+
             {{if .Markets}}
             <div class="panel">
                 <h3 class="panel-title">Resolve Market</h3>

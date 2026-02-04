@@ -94,6 +94,7 @@ type MarketView struct {
 }
 
 // shortID formats an ID as "first8...last8" for display.
+// IDs 19 characters or shorter are returned unchanged.
 func shortID(id string) string {
 	if len(id) <= 19 {
 		return id
@@ -161,6 +162,7 @@ func (h *MarketHandler) handleListMarkets(w http.ResponseWriter, r *http.Request
 }
 
 // buildMarketViews converts market states to views, fetching metadata in parallel.
+// Blocks until all metadata fetches complete.
 func (h *MarketHandler) buildMarketViews(ctx context.Context, states []service.MarketState) []MarketView {
 	views := make([]MarketView, len(states))
 	var wg sync.WaitGroup
@@ -605,6 +607,7 @@ func (h *MarketHandler) handleOracleAdmin(w http.ResponseWriter, r *http.Request
 
 	var markets []MarketView
 	var factoryContract string
+	var marketsError string
 
 	if h.factoryService != nil && h.factoryService.HasFactory() {
 		factoryContract = h.factoryService.FactoryContractID()
@@ -613,10 +616,12 @@ func (h *MarketHandler) handleOracleAdmin(w http.ResponseWriter, r *http.Request
 		contractIDs, err := h.factoryService.ListMarkets(ctx)
 		if err != nil {
 			h.logger.Warn("failed to list markets for oracle admin", "error", err)
+			marketsError = "Failed to load markets from factory"
 		} else {
 			states, err := h.factoryService.GetMarketStates(ctx, contractIDs)
 			if err != nil {
 				h.logger.Warn("failed to get market states for oracle admin", "error", err)
+				marketsError = "Failed to load market states"
 			} else {
 				markets = h.buildMarketViews(ctx, states)
 			}
@@ -628,6 +633,7 @@ func (h *MarketHandler) handleOracleAdmin(w http.ResponseWriter, r *http.Request
 		"DefaultLiquidityParam": 100.0,
 		"FactoryContract":       factoryContract,
 		"Markets":               markets,
+		"MarketsError":          marketsError,
 		"ActiveNav":             "oracle",
 		"Network":               h.networkName(),
 	}
@@ -656,6 +662,12 @@ func (h *MarketHandler) handleBuildDeployTx(w http.ResponseWriter, r *http.Reque
 
 	if metadataHash == "" {
 		http.Error(w, "Metadata hash is required (upload metadata to IPFS first)", http.StatusBadRequest)
+		return
+	}
+
+	// Validate IPFS CID format to prevent SSRF
+	if err := ipfs.ValidateCID(metadataHash); err != nil {
+		http.Error(w, "Invalid IPFS hash format (must be CIDv0 Qm... or CIDv1 b...)", http.StatusBadRequest)
 		return
 	}
 
@@ -791,6 +803,7 @@ func mapError(err error) errorResponse {
 
 // mapContractError maps Soroban contract error codes to user-friendly messages.
 // Error codes are defined in contracts/lmsr_market/src/error.rs
+// IMPORTANT: Keep this mapping in sync when adding new error codes to the contract.
 func mapContractError(errStr string) errorResponse {
 	// Extract error code from string like "Error(Contract, #13)"
 	switch {
