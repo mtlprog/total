@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/joho/godotenv"
 	"github.com/mtlprog/total/internal/config"
 	"github.com/mtlprog/total/internal/handler"
 	"github.com/mtlprog/total/internal/ipfs"
@@ -29,8 +30,19 @@ func main() {
 }
 
 func run() error {
+	// Load .env file if present (ignored in production)
+	_ = godotenv.Load()
+
 	// Parse configuration from environment
 	cfg := parseConfig()
+
+	// Validate required environment variables
+	if cfg.OraclePublicKey == "" {
+		return fmt.Errorf("ORACLE_PUBLIC_KEY environment variable is required")
+	}
+	if cfg.FactoryContract == "" {
+		return fmt.Errorf("MARKET_FACTORY_CONTRACT environment variable is required")
+	}
 
 	// Setup logging
 	logger.Setup(logger.ParseLevel(cfg.LogLevel))
@@ -73,21 +85,16 @@ func run() error {
 		slog.Default(),
 	)
 
-	// Initialize factory service (optional)
-	var factoryService *service.FactoryService
-	if cfg.FactoryContract != "" {
-		factoryService = service.NewFactoryService(
-			sorobanClient,
-			stellarClient,
-			txBuilder,
-			cfg.FactoryContract,
-			cfg.OraclePublicKey,
-			slog.Default(),
-		)
-		slog.Info("factory service enabled", "contract", cfg.FactoryContract)
-	} else {
-		slog.Warn("MARKET_FACTORY_CONTRACT not set, market listing disabled")
-	}
+	// Initialize factory service
+	factoryService := service.NewFactoryService(
+		sorobanClient,
+		stellarClient,
+		txBuilder,
+		cfg.FactoryContract,
+		cfg.OraclePublicKey,
+		slog.Default(),
+	)
+	slog.Info("factory service enabled", "contract", cfg.FactoryContract)
 
 	// Initialize IPFS client
 	ipfsClient := ipfs.NewClient(cfg.PinataAPIKey, cfg.PinataAPISecret)
@@ -98,9 +105,7 @@ func run() error {
 	}
 
 	// Warmup IPFS cache
-	if factoryService != nil {
-		go warmupIPFSCache(factoryService, ipfsClient)
-	}
+	go warmupIPFSCache(factoryService, ipfsClient)
 
 	// Initialize templates
 	tmpl, err := template.New()

@@ -15,6 +15,7 @@ require (
 	github.com/go-chi/chi v4.1.2+incompatible // indirect
 	github.com/go-errors/errors v1.5.1 // indirect
 	github.com/gorilla/schema v1.4.1 // indirect
+	github.com/joho/godotenv v1.5.1 // indirect
 	github.com/klauspost/compress v1.18.0 // indirect
 	github.com/kr/text v0.2.0 // indirect
 	github.com/manucorporat/sse v0.0.0-20160126180136-ee05b128a739 // indirect

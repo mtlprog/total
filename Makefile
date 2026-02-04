@@ -25,9 +25,9 @@ dev-logs:
 dev-down:
 	docker compose down
 
-# Run locally (reads config from .env via godotenv)
+# Run locally (loads .env via godotenv)
 run: build
-	./total serve
+	./total
 
 # Run tests
 test:
