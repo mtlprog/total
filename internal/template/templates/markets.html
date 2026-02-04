@@ -24,12 +24,13 @@
             {{end}}
 
             {{if .Markets}}
+            <!-- Active Markets Section -->
+            <h2 class="section-title">Active Markets</h2>
             <div class="market-list">
                 {{range .Markets}}
-                <div class="card">
-                    <h2 class="card-title">
-                        <a href="/market/{{.ID}}">{{.Question}}</a>
-                    </h2>
+                {{if not .IsResolved}}
+                <a href="/market/{{.ID}}" class="card card-link">
+                    <h2 class="card-title">{{.Question}}</h2>
 
                     <div class="prices">
                         <div class="price">
@@ -43,17 +44,45 @@
                     </div>
 
                     <div class="meta">
-                        {{if .IsResolved}}
-                        <span class="text-accent font-bold">RESOLVED: {{.Resolution}}</span>
-                        {{else}}
                         Volume: {{printf "%.0f" .YesSold}} YES / {{printf "%.0f" .NoSold}} NO
-                        {{end}}
                         <span class="text-muted"> · {{shortID .ID}}</span>
                     </div>
                     {{if .MetadataError}}
                     <div class="warning" style="margin-top: 0.75rem; margin-bottom: 0;">{{.MetadataError}}</div>
                     {{end}}
-                </div>
+                </a>
+                {{end}}
+                {{end}}
+            </div>
+
+            <!-- Resolved Markets Section -->
+            <h2 class="section-title">Resolved Markets</h2>
+            <div class="market-list">
+                {{range .Markets}}
+                {{if .IsResolved}}
+                <a href="/market/{{.ID}}" class="card card-link">
+                    <h2 class="card-title">{{.Question}}</h2>
+
+                    <div class="prices">
+                        <div class="price">
+                            <span class="price-label">YES</span>
+                            <span class="price-value price-yes">{{printf "%.1f" (mul .PriceYes 100)}}%</span>
+                        </div>
+                        <div class="price">
+                            <span class="price-label">NO</span>
+                            <span class="price-value price-no">{{printf "%.1f" (mul .PriceNo 100)}}%</span>
+                        </div>
+                    </div>
+
+                    <div class="meta">
+                        <span class="text-accent font-bold">RESOLVED: {{.Resolution}}</span>
+                        <span class="text-muted"> · {{shortID .ID}}</span>
+                    </div>
+                    {{if .MetadataError}}
+                    <div class="warning" style="margin-top: 0.75rem; margin-bottom: 0;">{{.MetadataError}}</div>
+                    {{end}}
+                </a>
+                {{end}}
                 {{end}}
             </div>
             {{else}}
