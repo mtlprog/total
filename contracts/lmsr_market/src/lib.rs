@@ -365,7 +365,8 @@ impl LmsrMarket {
         let gross_payout = winning_balance;
 
         // Calculate fee (2% = 200 basis points)
-        // Fee stays in pool and goes to oracle via withdraw_remaining
+        // Fee stays in pool; oracle recovers via withdraw_remaining()
+        // Note: Integer division truncates, so amounts < 50 units have zero fee (dust-level)
         let fee = gross_payout
             .checked_mul(CLAIM_FEE_BPS)
             .ok_or(MarketError::Overflow)?
@@ -1596,6 +1597,122 @@ mod test {
             pool_after,
             pool_before - expected_payout,
             "Fee should remain in pool"
+        );
+    }
+
+    #[test]
+    fn test_oracle_collects_accumulated_fees_from_multiple_claims() {
+        let (env, contract_id, oracle, token_address) = setup_test();
+        let client = LmsrMarketClient::new(&env, &contract_id);
+
+        let b = 100 * SCALE_FACTOR;
+        let initial_funding = 70 * SCALE_FACTOR;
+
+        client.initialize(
+            &oracle,
+            &token_address,
+            &b,
+            &String::from_str(&env, "QmTest"),
+            &initial_funding,
+        );
+
+        let token_admin_client = StellarAssetClient::new(&env, &token_address);
+
+        // Three users: two winners (YES), one loser (NO)
+        let winner1 = Address::generate(&env);
+        let winner2 = Address::generate(&env);
+        let loser = Address::generate(&env);
+        token_admin_client.mint(&winner1, &(100 * SCALE_FACTOR));
+        token_admin_client.mint(&winner2, &(100 * SCALE_FACTOR));
+        token_admin_client.mint(&loser, &(100 * SCALE_FACTOR));
+
+        // Winner1 buys 100 YES, Winner2 buys 50 YES, Loser buys 30 NO
+        let amount1 = 100 * SCALE_FACTOR;
+        let amount2 = 50 * SCALE_FACTOR;
+        let amount3 = 30 * SCALE_FACTOR;
+        client.buy(&winner1, &0, &amount1, &(100 * SCALE_FACTOR));
+        client.buy(&winner2, &0, &amount2, &(100 * SCALE_FACTOR));
+        client.buy(&loser, &1, &amount3, &(50 * SCALE_FACTOR));
+
+        let (_, _, _pool_after_buys, _) = client.get_state();
+
+        // Resolve: YES wins
+        client.resolve(&oracle, &0);
+
+        // Both winners claim
+        let payout1 = client.claim(&winner1);
+        let payout2 = client.claim(&winner2);
+
+        // Verify payouts are 98% of token amounts
+        let expected_fee1 = amount1 * CLAIM_FEE_BPS / BPS_DENOMINATOR; // 2% of 100 = 2
+        let expected_fee2 = amount2 * CLAIM_FEE_BPS / BPS_DENOMINATOR; // 2% of 50 = 1
+        assert_eq!(payout1, amount1 - expected_fee1);
+        assert_eq!(payout2, amount2 - expected_fee2);
+
+        // Total fees accumulated: 2 + 1 = 3 SCALE_FACTOR
+        let total_fees = expected_fee1 + expected_fee2;
+
+        // Pool should have: initial_funding + all_buy_costs - winner_payouts
+        // Which includes: loser's bet + accumulated fees
+        let (_, _, pool_after_claims, _) = client.get_state();
+        assert!(pool_after_claims > 0, "Pool should have remaining funds");
+
+        // Oracle withdraws everything remaining
+        let withdrawn = client.withdraw_remaining(&oracle);
+        assert_eq!(withdrawn, pool_after_claims);
+
+        // Verify oracle got at least the accumulated fees
+        // (also includes loser's funds and any leftover from initial funding)
+        assert!(
+            withdrawn >= total_fees,
+            "Oracle should receive at least the accumulated fees: {} >= {}",
+            withdrawn,
+            total_fees
+        );
+
+        // Pool should be empty now
+        let (_, _, pool_final, _) = client.get_state();
+        assert_eq!(pool_final, 0);
+    }
+
+    #[test]
+    fn test_claim_fee_small_amount_truncation() {
+        // Documents expected behavior: fee rounds to 0 for tiny amounts
+        // due to integer division truncation.
+        // This is acceptable as these are dust-level amounts.
+        let (env, contract_id, oracle, token_address) = setup_test();
+        let client = LmsrMarketClient::new(&env, &contract_id);
+
+        let b = 100 * SCALE_FACTOR;
+        let initial_funding = 70 * SCALE_FACTOR;
+
+        client.initialize(
+            &oracle,
+            &token_address,
+            &b,
+            &String::from_str(&env, "QmTest"),
+            &initial_funding,
+        );
+
+        let token_admin_client = StellarAssetClient::new(&env, &token_address);
+
+        let user = Address::generate(&env);
+        token_admin_client.mint(&user, &(100 * SCALE_FACTOR));
+
+        // Buy 49 units (below threshold where fee = 0)
+        // Fee calculation: 49 * 200 / 10000 = 9800 / 10000 = 0 (integer truncation)
+        let tiny_amount: i128 = 49;
+        client.buy(&user, &0, &tiny_amount, &SCALE_FACTOR);
+
+        client.resolve(&oracle, &0);
+
+        let payout = client.claim(&user);
+
+        // With amount = 49, fee = 49 * 200 / 10000 = 0 (truncated)
+        // So user gets full amount back (no fee on dust amounts)
+        assert_eq!(
+            payout, tiny_amount,
+            "Dust amounts should have zero fee due to integer truncation"
         );
     }
 
