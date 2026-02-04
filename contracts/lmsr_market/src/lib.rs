@@ -423,9 +423,10 @@ impl LmsrMarket {
             .instance()
             .get(&DataKey::UnclaimedWinningTokens)
             .unwrap_or(0);
-        env.storage()
-            .instance()
-            .set(&DataKey::UnclaimedWinningTokens, &(unclaimed - winning_balance));
+        env.storage().instance().set(
+            &DataKey::UnclaimedWinningTokens,
+            &(unclaimed - winning_balance),
+        );
 
         // Update collateral pool (only deduct user_payout, fee stays in pool)
         let pool: i128 = env
