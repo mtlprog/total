@@ -168,7 +168,13 @@ func (ci *ContractInvoker) SimulateAndPrepare(ctx context.Context, txXDR string)
 
 	// Update auth if provided by simulation
 	if len(simResult.Results) > 0 && len(simResult.Results[0].Auth) > 0 {
+		if len(tx.Operations) == 0 {
+			return "", fmt.Errorf("transaction has no operations")
+		}
 		invokeOp := tx.Operations[0].Body.InvokeHostFunctionOp
+		if invokeOp == nil {
+			return "", fmt.Errorf("operation is not an InvokeHostFunction")
+		}
 		invokeOp.Auth = make([]xdr.SorobanAuthorizationEntry, len(simResult.Results[0].Auth))
 
 		for i, authXDR := range simResult.Results[0].Auth {
