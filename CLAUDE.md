@@ -28,7 +28,7 @@ internal/
 ├── chart/         - ASCII price charts
 ├── config/        - Configuration constants (Stellar, Soroban)
 ├── handler/       - HTTP request handlers
-├── ipfs/          - Pinata IPFS client (unused, legacy)
+├── ipfs/          - Pinata IPFS client for market metadata
 ├── lmsr/          - LMSR pricing calculator (Go)
 ├── logger/        - Structured logging (slog/JSON)
 ├── model/         - Data structures (Market, Quote, etc.)
@@ -71,10 +71,26 @@ contracts/
 - Use `get_sell_quote` for sell transactions, not `get_quote` (they return different values)
 
 ### Market Lifecycle
-1. Oracle deploys market contract via factory
-2. Users buy outcome tokens (EURMTL → YES/NO tokens)
-3. Oracle resolves market
-4. Winners claim EURMTL via contract
+1. Oracle uploads metadata JSON to IPFS (via Pinata)
+2. Oracle deploys market contract via factory with IPFS hash
+3. Users buy/sell outcome tokens (collateral → YES/NO tokens)
+4. Oracle resolves market when outcome is known
+5. Winners claim collateral via contract
+
+### IPFS Metadata Format
+Market metadata is stored in IPFS as JSON:
+```json
+{
+  "question": "Will BTC reach $100k by end of 2025?",
+  "description": "Resolution criteria...",
+  "resolution_source": "coinbase.com",
+  "category": "crypto",
+  "end_date": "2025-12-31T23:59:59Z",
+  "created_at": "2024-01-01T00:00:00Z",
+  "created_by": "G..."
+}
+```
+The IPFS CID (hash) is stored on-chain via `metadata_hash` parameter.
 
 ## Environment Variables
 
@@ -82,8 +98,9 @@ contracts/
 - `SOROBAN_RPC_URL` (required) - Soroban RPC endpoint
 - `HORIZON_URL` - Horizon API URL for account lookups (default: mainnet)
 - `NETWORK_PASSPHRASE` - Stellar network passphrase
-- `CONTRACT_IDS` - Comma-separated list of known market contract IDs (C...)
-- `MARKET_FACTORY_CONTRACT` - Factory contract ID (C...)
+- `MARKET_FACTORY_CONTRACT` - Factory contract ID (C...) - required for market listing
+- `PINATA_API_KEY` - Pinata API key for IPFS metadata storage
+- `PINATA_API_SECRET` - Pinata API secret for IPFS metadata storage
 - `PORT` - HTTP server port (default: 8080)
 - `LOG_LEVEL` - Log level (debug, info, warn, error)
 
@@ -178,6 +195,8 @@ Examples:
 - `get_sell_quote(outcome, amount)` - Get sell quote (return_amount, price_after)
 - `get_balance(user, outcome)` - Get user's token balance
 - `get_state()` - Get (yes_sold, no_sold, pool, resolved)
+- `get_metadata_hash()` - Get IPFS CID for market metadata JSON
+- `get_collateral_token()` - Get collateral token address
 
 ### MarketFactory Contract
 - `initialize(admin, market_wasm_hash, default_collateral_token)` - Set up factory

@@ -25,7 +25,24 @@ pub struct LmsrMarket;
 
 #[contractimpl]
 impl LmsrMarket {
+    /// Constructor: Called automatically when deployed via factory's deploy_v2.
+    ///
+    /// Delegates to initialize() for the actual setup logic.
+    pub fn __constructor(
+        env: Env,
+        oracle: Address,
+        collateral_token: Address,
+        liquidity_param: i128,
+        metadata_hash: String,
+        initial_funding: i128,
+    ) {
+        Self::initialize(env, oracle, collateral_token, liquidity_param, metadata_hash, initial_funding)
+            .expect("initialization failed");
+    }
+
     /// Initialize the market with oracle, collateral token, liquidity parameter, and metadata.
+    ///
+    /// Can be called directly for manual deployment, or via constructor for factory deployment.
     ///
     /// # Arguments
     /// * `oracle` - Address that can resolve the market
@@ -647,6 +664,24 @@ impl LmsrMarket {
             .ok_or(MarketError::StorageCorrupted)
     }
 
+    /// Get the metadata hash (IPFS CID for market metadata JSON).
+    pub fn get_metadata_hash(env: Env) -> Result<String, MarketError> {
+        Self::require_initialized(&env)?;
+        env.storage()
+            .instance()
+            .get(&DataKey::MetadataHash)
+            .ok_or(MarketError::StorageCorrupted)
+    }
+
+    /// Get the collateral token address.
+    pub fn get_collateral_token(env: Env) -> Result<Address, MarketError> {
+        Self::require_initialized(&env)?;
+        env.storage()
+            .instance()
+            .get(&DataKey::CollateralToken)
+            .ok_or(MarketError::StorageCorrupted)
+    }
+
     // --- Internal helpers ---
 
     fn require_initialized(env: &Env) -> Result<(), MarketError> {
@@ -686,11 +721,17 @@ mod test {
     use super::*;
     use soroban_sdk::{testutils::Address as _, token::StellarAssetClient, Env};
 
+    /// Set up token and oracle, then register initialized market contract.
+    /// Returns (env, contract_id, oracle, token_address)
     fn setup_test() -> (Env, Address, Address, Address) {
+        setup_test_with_params(100 * SCALE_FACTOR, 70 * SCALE_FACTOR)
+    }
+
+    /// Set up with custom liquidity and funding params.
+    fn setup_test_with_params(liquidity_param: i128, initial_funding: i128) -> (Env, Address, Address, Address) {
         let env = Env::default();
         env.mock_all_auths();
 
-        let contract_id = env.register(LmsrMarket, ());
         let oracle = Address::generate(&env);
 
         // Create a test token
@@ -702,44 +743,38 @@ mod test {
         // Mint tokens to oracle for initial funding
         token_admin_client.mint(&oracle, &(1000 * SCALE_FACTOR));
 
+        // Register contract with constructor args (this calls __constructor which calls initialize)
+        let contract_id = env.register(
+            LmsrMarket,
+            (
+                oracle.clone(),
+                token_address.clone(),
+                liquidity_param,
+                String::from_str(&env, "QmTest"),
+                initial_funding,
+            ),
+        );
+
         (env, contract_id, oracle, token_address)
     }
 
     #[test]
     fn test_initialize() {
-        let (env, contract_id, oracle, token_address) = setup_test();
+        // setup_test() now registers with constructor which initializes
+        let (env, contract_id, oracle, _token_address) = setup_test();
         let client = LmsrMarketClient::new(&env, &contract_id);
 
         let b = 100 * SCALE_FACTOR;
-        let initial_funding = 70 * SCALE_FACTOR; // > b * ln(2) ≈ 69.3
 
-        client.initialize(
-            &oracle,
-            &token_address,
-            &b,
-            &String::from_str(&env, "QmTest"),
-            &initial_funding,
-        );
-
+        // Verify initialization worked
         assert_eq!(client.get_oracle(), oracle);
         assert_eq!(client.get_liquidity_param(), b);
     }
 
     #[test]
     fn test_buy() {
-        let (env, contract_id, oracle, token_address) = setup_test();
+        let (env, contract_id, _oracle, token_address) = setup_test();
         let client = LmsrMarketClient::new(&env, &contract_id);
-
-        let b = 100 * SCALE_FACTOR;
-        let initial_funding = 70 * SCALE_FACTOR;
-
-        client.initialize(
-            &oracle,
-            &token_address,
-            &b,
-            &String::from_str(&env, "QmTest"),
-            &initial_funding,
-        );
 
         // Create a user and mint tokens
         let user = Address::generate(&env);
@@ -759,17 +794,6 @@ mod test {
     fn test_resolve_and_claim() {
         let (env, contract_id, oracle, token_address) = setup_test();
         let client = LmsrMarketClient::new(&env, &contract_id);
-
-        let b = 100 * SCALE_FACTOR;
-        let initial_funding = 70 * SCALE_FACTOR;
-
-        client.initialize(
-            &oracle,
-            &token_address,
-            &b,
-            &String::from_str(&env, "QmTest"),
-            &initial_funding,
-        );
 
         // User buys YES tokens
         let user = Address::generate(&env);
@@ -792,17 +816,6 @@ mod test {
     fn test_price_at_equilibrium() {
         let (env, contract_id, oracle, token_address) = setup_test();
         let client = LmsrMarketClient::new(&env, &contract_id);
-
-        let b = 100 * SCALE_FACTOR;
-        let initial_funding = 70 * SCALE_FACTOR;
-
-        client.initialize(
-            &oracle,
-            &token_address,
-            &b,
-            &String::from_str(&env, "QmTest"),
-            &initial_funding,
-        );
 
         // At equilibrium (no tokens sold), price should be ~0.5
         let price_yes = client.get_price(&0);
@@ -829,17 +842,6 @@ mod test {
         let (env, contract_id, oracle, token_address) = setup_test();
         let client = LmsrMarketClient::new(&env, &contract_id);
 
-        let b = 100 * SCALE_FACTOR;
-        let initial_funding = 70 * SCALE_FACTOR;
-
-        client.initialize(
-            &oracle,
-            &token_address,
-            &b,
-            &String::from_str(&env, "QmTest"),
-            &initial_funding,
-        );
-
         // Try to resolve with non-oracle address
         let attacker = Address::generate(&env);
         client.resolve(&attacker, &0); // Should panic with Unauthorized
@@ -852,17 +854,6 @@ mod test {
     fn test_double_claim_fails() {
         let (env, contract_id, oracle, token_address) = setup_test();
         let client = LmsrMarketClient::new(&env, &contract_id);
-
-        let b = 100 * SCALE_FACTOR;
-        let initial_funding = 70 * SCALE_FACTOR;
-
-        client.initialize(
-            &oracle,
-            &token_address,
-            &b,
-            &String::from_str(&env, "QmTest"),
-            &initial_funding,
-        );
 
         // User buys YES tokens
         let user = Address::generate(&env);
@@ -890,17 +881,6 @@ mod test {
         let (env, contract_id, oracle, token_address) = setup_test();
         let client = LmsrMarketClient::new(&env, &contract_id);
 
-        let b = 100 * SCALE_FACTOR;
-        let initial_funding = 70 * SCALE_FACTOR;
-
-        client.initialize(
-            &oracle,
-            &token_address,
-            &b,
-            &String::from_str(&env, "QmTest"),
-            &initial_funding,
-        );
-
         let user = Address::generate(&env);
         let token_admin_client = StellarAssetClient::new(&env, &token_address);
         token_admin_client.mint(&user, &(100 * SCALE_FACTOR));
@@ -915,17 +895,6 @@ mod test {
     fn test_sell_min_return_not_met() {
         let (env, contract_id, oracle, token_address) = setup_test();
         let client = LmsrMarketClient::new(&env, &contract_id);
-
-        let b = 100 * SCALE_FACTOR;
-        let initial_funding = 70 * SCALE_FACTOR;
-
-        client.initialize(
-            &oracle,
-            &token_address,
-            &b,
-            &String::from_str(&env, "QmTest"),
-            &initial_funding,
-        );
 
         let user = Address::generate(&env);
         let token_admin_client = StellarAssetClient::new(&env, &token_address);
@@ -945,17 +914,6 @@ mod test {
     fn test_sell_basic() {
         let (env, contract_id, oracle, token_address) = setup_test();
         let client = LmsrMarketClient::new(&env, &contract_id);
-
-        let b = 100 * SCALE_FACTOR;
-        let initial_funding = 70 * SCALE_FACTOR;
-
-        client.initialize(
-            &oracle,
-            &token_address,
-            &b,
-            &String::from_str(&env, "QmTest"),
-            &initial_funding,
-        );
 
         let user = Address::generate(&env);
         let token_admin_client = StellarAssetClient::new(&env, &token_address);
@@ -985,17 +943,6 @@ mod test {
         let (env, contract_id, oracle, token_address) = setup_test();
         let client = LmsrMarketClient::new(&env, &contract_id);
 
-        let b = 100 * SCALE_FACTOR;
-        let initial_funding = 70 * SCALE_FACTOR;
-
-        client.initialize(
-            &oracle,
-            &token_address,
-            &b,
-            &String::from_str(&env, "QmTest"),
-            &initial_funding,
-        );
-
         let user = Address::generate(&env);
         let token_admin_client = StellarAssetClient::new(&env, &token_address);
         token_admin_client.mint(&user, &(100 * SCALE_FACTOR));
@@ -1013,17 +960,6 @@ mod test {
         let (env, contract_id, oracle, token_address) = setup_test();
         let client = LmsrMarketClient::new(&env, &contract_id);
 
-        let b = 100 * SCALE_FACTOR;
-        let initial_funding = 70 * SCALE_FACTOR;
-
-        client.initialize(
-            &oracle,
-            &token_address,
-            &b,
-            &String::from_str(&env, "QmTest"),
-            &initial_funding,
-        );
-
         let user = Address::generate(&env);
         let token_admin_client = StellarAssetClient::new(&env, &token_address);
         token_admin_client.mint(&user, &(100 * SCALE_FACTOR));
@@ -1040,35 +976,14 @@ mod test {
 
     // --- Market lifecycle error state tests ---
 
-    #[test]
-    #[should_panic(expected = "Error(Contract, #2)")] // NotInitialized = 2
-    fn test_buy_on_uninitialized_contract() {
-        let env = Env::default();
-        env.mock_all_auths();
-
-        let contract_id = env.register(LmsrMarket, ());
-        let client = LmsrMarketClient::new(&env, &contract_id);
-
-        let user = Address::generate(&env);
-        client.buy(&user, &0, &(10 * SCALE_FACTOR), &(50 * SCALE_FACTOR));
-    }
+    // Note: test_buy_on_uninitialized_contract was removed because with the constructor,
+    // contracts are always initialized at deployment time.
 
     #[test]
     #[should_panic(expected = "Error(Contract, #3)")] // AlreadyResolved = 3
     fn test_buy_on_resolved_market() {
         let (env, contract_id, oracle, token_address) = setup_test();
         let client = LmsrMarketClient::new(&env, &contract_id);
-
-        let b = 100 * SCALE_FACTOR;
-        let initial_funding = 70 * SCALE_FACTOR;
-
-        client.initialize(
-            &oracle,
-            &token_address,
-            &b,
-            &String::from_str(&env, "QmTest"),
-            &initial_funding,
-        );
 
         // Resolve immediately
         client.resolve(&oracle, &0);
@@ -1086,17 +1001,6 @@ mod test {
         let (env, contract_id, oracle, token_address) = setup_test();
         let client = LmsrMarketClient::new(&env, &contract_id);
 
-        let b = 100 * SCALE_FACTOR;
-        let initial_funding = 70 * SCALE_FACTOR;
-
-        client.initialize(
-            &oracle,
-            &token_address,
-            &b,
-            &String::from_str(&env, "QmTest"),
-            &initial_funding,
-        );
-
         let user = Address::generate(&env);
         let token_admin_client = StellarAssetClient::new(&env, &token_address);
         token_admin_client.mint(&user, &(100 * SCALE_FACTOR));
@@ -1113,17 +1017,6 @@ mod test {
     fn test_loser_cannot_claim() {
         let (env, contract_id, oracle, token_address) = setup_test();
         let client = LmsrMarketClient::new(&env, &contract_id);
-
-        let b = 100 * SCALE_FACTOR;
-        let initial_funding = 70 * SCALE_FACTOR;
-
-        client.initialize(
-            &oracle,
-            &token_address,
-            &b,
-            &String::from_str(&env, "QmTest"),
-            &initial_funding,
-        );
 
         let user = Address::generate(&env);
         let token_admin_client = StellarAssetClient::new(&env, &token_address);
@@ -1146,17 +1039,6 @@ mod test {
         let (env, contract_id, oracle, token_address) = setup_test();
         let client = LmsrMarketClient::new(&env, &contract_id);
 
-        let b = 100 * SCALE_FACTOR;
-        let initial_funding = 70 * SCALE_FACTOR;
-
-        client.initialize(
-            &oracle,
-            &token_address,
-            &b,
-            &String::from_str(&env, "QmTest"),
-            &initial_funding,
-        );
-
         let winner = Address::generate(&env);
         let loser = Address::generate(&env);
         let token_admin_client = StellarAssetClient::new(&env, &token_address);
@@ -1167,9 +1049,9 @@ mod test {
         let yes_cost = client.buy(&winner, &0, &(10 * SCALE_FACTOR), &(50 * SCALE_FACTOR));
         let no_cost = client.buy(&loser, &1, &(10 * SCALE_FACTOR), &(50 * SCALE_FACTOR));
 
-        // Check pool increased
+        // Check pool increased (initial_funding is 70 * SCALE_FACTOR from setup_test)
         let (_, _, pool_before, _) = client.get_state();
-        assert_eq!(pool_before, initial_funding + yes_cost + no_cost);
+        assert_eq!(pool_before, 70 * SCALE_FACTOR + yes_cost + no_cost);
 
         // Resolve: YES wins
         client.resolve(&oracle, &0);
@@ -1194,26 +1076,15 @@ mod test {
 
     #[test]
     fn test_withdraw_remaining_no_trades() {
-        let (env, contract_id, oracle, token_address) = setup_test();
+        let (env, contract_id, oracle, _token_address) = setup_test();
         let client = LmsrMarketClient::new(&env, &contract_id);
-
-        let b = 100 * SCALE_FACTOR;
-        let initial_funding = 70 * SCALE_FACTOR;
-
-        client.initialize(
-            &oracle,
-            &token_address,
-            &b,
-            &String::from_str(&env, "QmTest"),
-            &initial_funding,
-        );
 
         // No trades, just resolve
         client.resolve(&oracle, &0);
 
-        // Oracle can withdraw entire initial funding
+        // Oracle can withdraw entire initial funding (70 * SCALE_FACTOR from setup_test)
         let withdrawn = client.withdraw_remaining(&oracle);
-        assert_eq!(withdrawn, initial_funding);
+        assert_eq!(withdrawn, 70 * SCALE_FACTOR);
     }
 
     #[test]
@@ -1221,17 +1092,6 @@ mod test {
     fn test_withdraw_remaining_before_resolve() {
         let (env, contract_id, oracle, token_address) = setup_test();
         let client = LmsrMarketClient::new(&env, &contract_id);
-
-        let b = 100 * SCALE_FACTOR;
-        let initial_funding = 70 * SCALE_FACTOR;
-
-        client.initialize(
-            &oracle,
-            &token_address,
-            &b,
-            &String::from_str(&env, "QmTest"),
-            &initial_funding,
-        );
 
         // Try to withdraw before resolution
         client.withdraw_remaining(&oracle); // Should panic
@@ -1242,17 +1102,6 @@ mod test {
     fn test_withdraw_remaining_non_oracle() {
         let (env, contract_id, oracle, token_address) = setup_test();
         let client = LmsrMarketClient::new(&env, &contract_id);
-
-        let b = 100 * SCALE_FACTOR;
-        let initial_funding = 70 * SCALE_FACTOR;
-
-        client.initialize(
-            &oracle,
-            &token_address,
-            &b,
-            &String::from_str(&env, "QmTest"),
-            &initial_funding,
-        );
 
         client.resolve(&oracle, &0);
 
@@ -1266,17 +1115,6 @@ mod test {
     fn test_withdraw_remaining_twice() {
         let (env, contract_id, oracle, token_address) = setup_test();
         let client = LmsrMarketClient::new(&env, &contract_id);
-
-        let b = 100 * SCALE_FACTOR;
-        let initial_funding = 70 * SCALE_FACTOR;
-
-        client.initialize(
-            &oracle,
-            &token_address,
-            &b,
-            &String::from_str(&env, "QmTest"),
-            &initial_funding,
-        );
 
         client.resolve(&oracle, &0);
 
@@ -1295,17 +1133,6 @@ mod test {
         let (env, contract_id, oracle, token_address) = setup_test();
         let client = LmsrMarketClient::new(&env, &contract_id);
 
-        let b = 100 * SCALE_FACTOR;
-        let initial_funding = 70 * SCALE_FACTOR;
-
-        client.initialize(
-            &oracle,
-            &token_address,
-            &b,
-            &String::from_str(&env, "QmTest"),
-            &initial_funding,
-        );
-
         // Try to get quote with invalid outcome
         client.get_quote(&99, &(10 * SCALE_FACTOR));
     }
@@ -1315,17 +1142,6 @@ mod test {
     fn test_get_quote_zero_amount() {
         let (env, contract_id, oracle, token_address) = setup_test();
         let client = LmsrMarketClient::new(&env, &contract_id);
-
-        let b = 100 * SCALE_FACTOR;
-        let initial_funding = 70 * SCALE_FACTOR;
-
-        client.initialize(
-            &oracle,
-            &token_address,
-            &b,
-            &String::from_str(&env, "QmTest"),
-            &initial_funding,
-        );
 
         // Try to get quote with zero amount
         client.get_quote(&0, &0);
@@ -1339,17 +1155,6 @@ mod test {
         let (env, contract_id, oracle, token_address) = setup_test();
         let client = LmsrMarketClient::new(&env, &contract_id);
 
-        let b = 100 * SCALE_FACTOR;
-        let initial_funding = 70 * SCALE_FACTOR;
-
-        client.initialize(
-            &oracle,
-            &token_address,
-            &b,
-            &String::from_str(&env, "QmTest"),
-            &initial_funding,
-        );
-
         // First resolution succeeds
         client.resolve(&oracle, &0);
 
@@ -1360,22 +1165,35 @@ mod test {
     // --- Insufficient initial funding test ---
 
     #[test]
-    #[should_panic(expected = "Error(Contract, #6)")] // InvalidAmount = 6
+    #[should_panic(expected = "InvalidAmount")]
     fn test_initialize_insufficient_funding() {
-        let (env, contract_id, oracle, token_address) = setup_test();
-        let client = LmsrMarketClient::new(&env, &contract_id);
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let oracle = Address::generate(&env);
+
+        // Create a test token
+        let token_admin = Address::generate(&env);
+        let token_contract = env.register_stellar_asset_contract_v2(token_admin.clone());
+        let token_address = token_contract.address();
+        let token_admin_client = StellarAssetClient::new(&env, &token_address);
+        token_admin_client.mint(&oracle, &(1000 * SCALE_FACTOR));
 
         let b = 100 * SCALE_FACTOR;
         // Required funding is b * ln(2) ≈ 69.3, so 50 is insufficient
         let insufficient_funding = 50 * SCALE_FACTOR;
 
-        client.initialize(
-            &oracle,
-            &token_address,
-            &b,
-            &String::from_str(&env, "QmTest"),
-            &insufficient_funding,
-        ); // Should panic with InvalidAmount
+        // Constructor should panic with InvalidAmount
+        let _contract_id = env.register(
+            LmsrMarket,
+            (
+                oracle.clone(),
+                token_address.clone(),
+                b,
+                String::from_str(&env, "QmTest"),
+                insufficient_funding,
+            ),
+        );
     }
 
     // --- Invalid outcome tests for buy/sell/resolve ---
@@ -1385,17 +1203,6 @@ mod test {
     fn test_buy_invalid_outcome() {
         let (env, contract_id, oracle, token_address) = setup_test();
         let client = LmsrMarketClient::new(&env, &contract_id);
-
-        let b = 100 * SCALE_FACTOR;
-        let initial_funding = 70 * SCALE_FACTOR;
-
-        client.initialize(
-            &oracle,
-            &token_address,
-            &b,
-            &String::from_str(&env, "QmTest"),
-            &initial_funding,
-        );
 
         let user = Address::generate(&env);
         let token_admin_client = StellarAssetClient::new(&env, &token_address);
@@ -1410,17 +1217,6 @@ mod test {
     fn test_sell_invalid_outcome() {
         let (env, contract_id, oracle, token_address) = setup_test();
         let client = LmsrMarketClient::new(&env, &contract_id);
-
-        let b = 100 * SCALE_FACTOR;
-        let initial_funding = 70 * SCALE_FACTOR;
-
-        client.initialize(
-            &oracle,
-            &token_address,
-            &b,
-            &String::from_str(&env, "QmTest"),
-            &initial_funding,
-        );
 
         let user = Address::generate(&env);
         let token_admin_client = StellarAssetClient::new(&env, &token_address);
@@ -1439,17 +1235,6 @@ mod test {
         let (env, contract_id, oracle, token_address) = setup_test();
         let client = LmsrMarketClient::new(&env, &contract_id);
 
-        let b = 100 * SCALE_FACTOR;
-        let initial_funding = 70 * SCALE_FACTOR;
-
-        client.initialize(
-            &oracle,
-            &token_address,
-            &b,
-            &String::from_str(&env, "QmTest"),
-            &initial_funding,
-        );
-
         // Try to resolve with invalid outcome (99)
         client.resolve(&oracle, &99);
     }
@@ -1461,17 +1246,6 @@ mod test {
     fn test_buy_zero_amount() {
         let (env, contract_id, oracle, token_address) = setup_test();
         let client = LmsrMarketClient::new(&env, &contract_id);
-
-        let b = 100 * SCALE_FACTOR;
-        let initial_funding = 70 * SCALE_FACTOR;
-
-        client.initialize(
-            &oracle,
-            &token_address,
-            &b,
-            &String::from_str(&env, "QmTest"),
-            &initial_funding,
-        );
 
         let user = Address::generate(&env);
         let token_admin_client = StellarAssetClient::new(&env, &token_address);
@@ -1487,17 +1261,6 @@ mod test {
         let (env, contract_id, oracle, token_address) = setup_test();
         let client = LmsrMarketClient::new(&env, &contract_id);
 
-        let b = 100 * SCALE_FACTOR;
-        let initial_funding = 70 * SCALE_FACTOR;
-
-        client.initialize(
-            &oracle,
-            &token_address,
-            &b,
-            &String::from_str(&env, "QmTest"),
-            &initial_funding,
-        );
-
         let user = Address::generate(&env);
         let token_admin_client = StellarAssetClient::new(&env, &token_address);
         token_admin_client.mint(&user, &(100 * SCALE_FACTOR));
@@ -1512,17 +1275,6 @@ mod test {
     fn test_multiple_users_claim_correctly() {
         let (env, contract_id, oracle, token_address) = setup_test();
         let client = LmsrMarketClient::new(&env, &contract_id);
-
-        let b = 100 * SCALE_FACTOR;
-        let initial_funding = 70 * SCALE_FACTOR;
-
-        client.initialize(
-            &oracle,
-            &token_address,
-            &b,
-            &String::from_str(&env, "QmTest"),
-            &initial_funding,
-        );
 
         let token_admin_client = StellarAssetClient::new(&env, &token_address);
 
@@ -1555,17 +1307,6 @@ mod test {
     fn test_claim_fee_calculation() {
         let (env, contract_id, oracle, token_address) = setup_test();
         let client = LmsrMarketClient::new(&env, &contract_id);
-
-        let b = 100 * SCALE_FACTOR;
-        let initial_funding = 70 * SCALE_FACTOR;
-
-        client.initialize(
-            &oracle,
-            &token_address,
-            &b,
-            &String::from_str(&env, "QmTest"),
-            &initial_funding,
-        );
 
         let token_admin_client = StellarAssetClient::new(&env, &token_address);
 
@@ -1604,17 +1345,6 @@ mod test {
     fn test_oracle_collects_accumulated_fees_from_multiple_claims() {
         let (env, contract_id, oracle, token_address) = setup_test();
         let client = LmsrMarketClient::new(&env, &contract_id);
-
-        let b = 100 * SCALE_FACTOR;
-        let initial_funding = 70 * SCALE_FACTOR;
-
-        client.initialize(
-            &oracle,
-            &token_address,
-            &b,
-            &String::from_str(&env, "QmTest"),
-            &initial_funding,
-        );
 
         let token_admin_client = StellarAssetClient::new(&env, &token_address);
 
@@ -1683,17 +1413,6 @@ mod test {
         let (env, contract_id, oracle, token_address) = setup_test();
         let client = LmsrMarketClient::new(&env, &contract_id);
 
-        let b = 100 * SCALE_FACTOR;
-        let initial_funding = 70 * SCALE_FACTOR;
-
-        client.initialize(
-            &oracle,
-            &token_address,
-            &b,
-            &String::from_str(&env, "QmTest"),
-            &initial_funding,
-        );
-
         let token_admin_client = StellarAssetClient::new(&env, &token_address);
 
         let user = Address::generate(&env);
@@ -1722,17 +1441,6 @@ mod test {
     fn test_sell_all_returns_to_near_equilibrium() {
         let (env, contract_id, oracle, token_address) = setup_test();
         let client = LmsrMarketClient::new(&env, &contract_id);
-
-        let b = 100 * SCALE_FACTOR;
-        let initial_funding = 70 * SCALE_FACTOR;
-
-        client.initialize(
-            &oracle,
-            &token_address,
-            &b,
-            &String::from_str(&env, "QmTest"),
-            &initial_funding,
-        );
 
         let user = Address::generate(&env);
         let token_admin_client = StellarAssetClient::new(&env, &token_address);
@@ -1774,17 +1482,6 @@ mod test {
         let (env, contract_id, oracle, token_address) = setup_test();
         let client = LmsrMarketClient::new(&env, &contract_id);
 
-        let b = 100 * SCALE_FACTOR;
-        let initial_funding = 70 * SCALE_FACTOR;
-
-        client.initialize(
-            &oracle,
-            &token_address,
-            &b,
-            &String::from_str(&env, "QmTest"),
-            &initial_funding,
-        );
-
         let user = Address::generate(&env);
         let token_admin_client = StellarAssetClient::new(&env, &token_address);
         token_admin_client.mint(&user, &(100 * SCALE_FACTOR));
@@ -1808,17 +1505,6 @@ mod test {
     fn test_get_sell_quote_invalid_outcome() {
         let (env, contract_id, oracle, token_address) = setup_test();
         let client = LmsrMarketClient::new(&env, &contract_id);
-
-        let b = 100 * SCALE_FACTOR;
-        let initial_funding = 70 * SCALE_FACTOR;
-
-        client.initialize(
-            &oracle,
-            &token_address,
-            &b,
-            &String::from_str(&env, "QmTest"),
-            &initial_funding,
-        );
 
         // Try to get sell quote with invalid outcome
         client.get_sell_quote(&99, &(10 * SCALE_FACTOR));

@@ -25,9 +25,9 @@ dev-logs:
 dev-down:
 	docker compose down
 
-# Run locally (requires ORACLE_PUBLIC_KEY)
+# Run locally (reads config from .env via godotenv)
 run: build
-	./total serve --oracle-public-key "${ORACLE_PUBLIC_KEY}"
+	./total serve
 
 # Run tests
 test:

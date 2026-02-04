@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deploy Market - Total</title>
+    <style>
+        :root {
+            --bg: #0a0a0a;
+            --card: #141414;
+            --border: #2a2a2a;
+            --text: #e0e0e0;
+            --text-muted: #888;
+            --accent: #3b82f6;
+        }
+        body {
+            font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', monospace;
+            background: var(--bg);
+            color: var(--text);
+            max-width: 700px;
+            margin: 0 auto;
+            padding: 2rem;
+            line-height: 1.6;
+        }
+        h1 {
+            color: var(--text);
+            margin-bottom: 0.5rem;
+        }
+        .nav {
+            margin-bottom: 2rem;
+        }
+        .nav a {
+            color: var(--accent);
+            text-decoration: none;
+        }
+        .section {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+        .section-title {
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 1rem;
+        }
+        form {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+        label {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+        input, textarea, select {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            padding: 0.75rem;
+            color: var(--text);
+            font-family: inherit;
+            font-size: 1rem;
+        }
+        input:focus, textarea:focus, select:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+        textarea {
+            min-height: 100px;
+            resize: vertical;
+        }
+        .help {
+            color: var(--text-muted);
+            font-size: 0.8rem;
+        }
+        .btn {
+            padding: 0.75rem 1.5rem;
+            background: var(--accent);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 1rem;
+        }
+        .btn:hover {
+            opacity: 0.9;
+        }
+        .warning {
+            background: #331;
+            border: 1px solid #553;
+            border-radius: 4px;
+            padding: 1rem;
+            color: #ffa;
+            font-size: 0.9rem;
+        }
+        .info {
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            margin-top: 1rem;
+        }
+        code {
+            background: var(--bg);
+            padding: 0.2rem 0.4rem;
+            border-radius: 3px;
+            font-size: 0.9rem;
+        }
+        pre {
+            background: var(--bg);
+            padding: 1rem;
+            border-radius: 4px;
+            overflow-x: auto;
+            font-size: 0.85rem;
+        }
+    </style>
+</head>
+<body>
+    <nav class="nav">
+        <a href="/">← Back to Markets</a>
+    </nav>
+
+    <h1>Deploy New Market</h1>
+    <p class="info">Deploy a new prediction market via the factory contract. You must sign the transaction with the oracle key.</p>
+
+    <div class="section">
+        <div class="section-title">Step 1: Upload Metadata to IPFS</div>
+        <p style="color: var(--text-muted); margin-bottom: 1rem;">
+            First, upload your market metadata JSON to IPFS (via Pinata or similar).
+            The metadata should contain:
+        </p>
+        <pre>{
+  "question": "Will BTC reach $100k by end of 2025?",
+  "description": "Resolution: Resolves YES if BTC price on Coinbase reaches $100,000 USD at any point before December 31, 2025 23:59 UTC.",
+  "resolution_source": "coinbase.com",
+  "category": "crypto",
+  "end_date": "2025-12-31T23:59:59Z",
+  "created_at": "2024-01-01T00:00:00Z"
+}</pre>
+        <p class="help">
+            Use <a href="https://app.pinata.cloud/" target="_blank" style="color: var(--accent);">Pinata</a> to upload the JSON and get the IPFS hash (CID).
+        </p>
+    </div>
+
+    <div class="section">
+        <div class="section-title">Step 2: Deploy Market</div>
+        <form method="POST" action="/deploy">
+            <div class="form-group">
+                <label for="metadata_hash">IPFS Metadata Hash (CID) *</label>
+                <input type="text" id="metadata_hash" name="metadata_hash" required
+                       placeholder="QmXxx... or bafyxxx...">
+                <span class="help">The IPFS CID of your uploaded metadata JSON.</span>
+            </div>
+
+            <div class="form-group">
+                <label for="liquidity_param">Liquidity Parameter (b)</label>
+                <input type="number" id="liquidity_param" name="liquidity_param"
+                       value="{{.DefaultLiquidityParam}}" min="1" step="0.01">
+                <span class="help">
+                    Higher = more liquidity, lower price impact, higher initial cost.
+                    Recommended: 100-1000.
+                </span>
+            </div>
+
+            <div class="form-group">
+                <label for="initial_funding">Initial Funding (collateral tokens)</label>
+                <input type="number" id="initial_funding" name="initial_funding"
+                       value="70" min="1" step="0.01">
+                <span class="help">
+                    Must be at least 70% of liquidity parameter (b × 0.7).
+                    This provides initial liquidity for the market.
+                </span>
+            </div>
+
+            <div class="warning">
+                <strong>Oracle Required:</strong> This transaction must be signed by the oracle account
+                (<code>{{.OraclePublicKey}}</code>).
+                <br><br>
+                <strong>Factory Contract:</strong> <code>{{.FactoryContract}}</code>
+            </div>
+
+            <button type="submit" class="btn">Generate Deploy Transaction</button>
+        </form>
+    </div>
+
+    <div class="section">
+        <div class="section-title">How It Works</div>
+        <ol style="margin: 0; padding-left: 1.5rem; color: var(--text-muted);">
+            <li>Create metadata JSON with question, description, etc.</li>
+            <li>Upload JSON to IPFS and copy the CID</li>
+            <li>Fill in the form above with IPFS CID and parameters</li>
+            <li>Click "Generate Deploy Transaction" to get the XDR</li>
+            <li>Sign the XDR with your oracle wallet</li>
+            <li>Submit the signed transaction to Stellar network</li>
+            <li>New market contract is deployed and registered with factory</li>
+            <li>Market appears on the markets list automatically</li>
+        </ol>
+    </div>
+</body>
+</html>
