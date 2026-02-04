@@ -8,7 +8,7 @@ use error::MarketError;
 use soroban_sdk::{contract, contractimpl, token, Address, Env, String};
 #[cfg(test)]
 use storage::SCALE_FACTOR;
-use storage::{is_valid_outcome, DataKey, BPS_DENOMINATOR, CLAIM_FEE_BPS, OUTCOME_NO, OUTCOME_YES};
+use storage::{is_valid_outcome, DataKey, BPS_DENOMINATOR, CLAIM_FEE_BPS, OUTCOME_YES};
 
 /// LMSR Prediction Market Contract
 ///
@@ -824,7 +824,7 @@ mod test {
 
     #[test]
     fn test_price_at_equilibrium() {
-        let (env, contract_id, oracle, token_address) = setup_test();
+        let (env, contract_id, _oracle, _token_address) = setup_test();
         let client = LmsrMarketClient::new(&env, &contract_id);
 
         // At equilibrium (no tokens sold), price should be ~0.5
@@ -833,12 +833,12 @@ mod test {
 
         // Allow for some floating point error
         assert!(
-            price_yes >= 4_900_000 && price_yes <= 5_100_000,
+            (4_900_000..=5_100_000).contains(&price_yes),
             "Expected price_yes near 5_000_000, got {}",
             price_yes
         );
         assert!(
-            price_no >= 4_900_000 && price_no <= 5_100_000,
+            (4_900_000..=5_100_000).contains(&price_no),
             "Expected price_no near 5_000_000, got {}",
             price_no
         );
@@ -849,7 +849,7 @@ mod test {
     #[test]
     #[should_panic(expected = "Error(Contract, #10)")] // Unauthorized = 10
     fn test_resolve_by_non_oracle_fails() {
-        let (env, contract_id, oracle, token_address) = setup_test();
+        let (env, contract_id, _oracle, _token_address) = setup_test();
         let client = LmsrMarketClient::new(&env, &contract_id);
 
         // Try to resolve with non-oracle address
@@ -888,7 +888,7 @@ mod test {
     #[test]
     #[should_panic(expected = "Error(Contract, #8)")] // SlippageExceeded = 8
     fn test_buy_slippage_exceeded() {
-        let (env, contract_id, oracle, token_address) = setup_test();
+        let (env, contract_id, _oracle, token_address) = setup_test();
         let client = LmsrMarketClient::new(&env, &contract_id);
 
         let user = Address::generate(&env);
@@ -903,7 +903,7 @@ mod test {
     #[test]
     #[should_panic(expected = "Error(Contract, #9)")] // ReturnTooLow = 9
     fn test_sell_min_return_not_met() {
-        let (env, contract_id, oracle, token_address) = setup_test();
+        let (env, contract_id, _oracle, token_address) = setup_test();
         let client = LmsrMarketClient::new(&env, &contract_id);
 
         let user = Address::generate(&env);
@@ -922,7 +922,7 @@ mod test {
 
     #[test]
     fn test_sell_basic() {
-        let (env, contract_id, oracle, token_address) = setup_test();
+        let (env, contract_id, _oracle, token_address) = setup_test();
         let client = LmsrMarketClient::new(&env, &contract_id);
 
         let user = Address::generate(&env);
@@ -950,7 +950,7 @@ mod test {
     #[test]
     #[should_panic(expected = "Error(Contract, #7)")] // InsufficientBalance = 7
     fn test_sell_insufficient_balance() {
-        let (env, contract_id, oracle, token_address) = setup_test();
+        let (env, contract_id, _oracle, token_address) = setup_test();
         let client = LmsrMarketClient::new(&env, &contract_id);
 
         let user = Address::generate(&env);
@@ -1008,7 +1008,7 @@ mod test {
     #[test]
     #[should_panic(expected = "Error(Contract, #4)")] // NotResolved = 4
     fn test_claim_on_unresolved_market() {
-        let (env, contract_id, oracle, token_address) = setup_test();
+        let (env, contract_id, _oracle, token_address) = setup_test();
         let client = LmsrMarketClient::new(&env, &contract_id);
 
         let user = Address::generate(&env);
@@ -1101,7 +1101,7 @@ mod test {
     #[test]
     #[should_panic(expected = "Error(Contract, #4)")] // NotResolved = 4
     fn test_withdraw_remaining_before_resolve() {
-        let (env, contract_id, oracle, token_address) = setup_test();
+        let (env, contract_id, oracle, _token_address) = setup_test();
         let client = LmsrMarketClient::new(&env, &contract_id);
 
         // Try to withdraw before resolution
@@ -1111,7 +1111,7 @@ mod test {
     #[test]
     #[should_panic(expected = "Error(Contract, #10)")] // Unauthorized = 10
     fn test_withdraw_remaining_non_oracle() {
-        let (env, contract_id, oracle, token_address) = setup_test();
+        let (env, contract_id, oracle, _token_address) = setup_test();
         let client = LmsrMarketClient::new(&env, &contract_id);
 
         client.resolve(&oracle, &0);
@@ -1124,7 +1124,7 @@ mod test {
     #[test]
     #[should_panic(expected = "Error(Contract, #13)")] // NothingToClaim = 13
     fn test_withdraw_remaining_twice() {
-        let (env, contract_id, oracle, token_address) = setup_test();
+        let (env, contract_id, oracle, _token_address) = setup_test();
         let client = LmsrMarketClient::new(&env, &contract_id);
 
         client.resolve(&oracle, &0);
@@ -1141,7 +1141,7 @@ mod test {
     #[test]
     #[should_panic(expected = "Error(Contract, #5)")] // InvalidOutcome = 5
     fn test_get_quote_invalid_outcome() {
-        let (env, contract_id, oracle, token_address) = setup_test();
+        let (env, contract_id, _oracle, _token_address) = setup_test();
         let client = LmsrMarketClient::new(&env, &contract_id);
 
         // Try to get quote with invalid outcome
@@ -1151,7 +1151,7 @@ mod test {
     #[test]
     #[should_panic(expected = "Error(Contract, #6)")] // InvalidAmount = 6
     fn test_get_quote_zero_amount() {
-        let (env, contract_id, oracle, token_address) = setup_test();
+        let (env, contract_id, _oracle, _token_address) = setup_test();
         let client = LmsrMarketClient::new(&env, &contract_id);
 
         // Try to get quote with zero amount
@@ -1163,7 +1163,7 @@ mod test {
     #[test]
     #[should_panic(expected = "Error(Contract, #3)")] // AlreadyResolved = 3
     fn test_double_resolve_fails() {
-        let (env, contract_id, oracle, token_address) = setup_test();
+        let (env, contract_id, oracle, _token_address) = setup_test();
         let client = LmsrMarketClient::new(&env, &contract_id);
 
         // First resolution succeeds
@@ -1212,7 +1212,7 @@ mod test {
     #[test]
     #[should_panic(expected = "Error(Contract, #5)")] // InvalidOutcome = 5
     fn test_buy_invalid_outcome() {
-        let (env, contract_id, oracle, token_address) = setup_test();
+        let (env, contract_id, _oracle, token_address) = setup_test();
         let client = LmsrMarketClient::new(&env, &contract_id);
 
         let user = Address::generate(&env);
@@ -1226,7 +1226,7 @@ mod test {
     #[test]
     #[should_panic(expected = "Error(Contract, #5)")] // InvalidOutcome = 5
     fn test_sell_invalid_outcome() {
-        let (env, contract_id, oracle, token_address) = setup_test();
+        let (env, contract_id, _oracle, token_address) = setup_test();
         let client = LmsrMarketClient::new(&env, &contract_id);
 
         let user = Address::generate(&env);
@@ -1243,7 +1243,7 @@ mod test {
     #[test]
     #[should_panic(expected = "Error(Contract, #5)")] // InvalidOutcome = 5
     fn test_resolve_invalid_outcome() {
-        let (env, contract_id, oracle, token_address) = setup_test();
+        let (env, contract_id, oracle, _token_address) = setup_test();
         let client = LmsrMarketClient::new(&env, &contract_id);
 
         // Try to resolve with invalid outcome (99)
@@ -1255,7 +1255,7 @@ mod test {
     #[test]
     #[should_panic(expected = "Error(Contract, #6)")] // InvalidAmount = 6
     fn test_buy_zero_amount() {
-        let (env, contract_id, oracle, token_address) = setup_test();
+        let (env, contract_id, _oracle, token_address) = setup_test();
         let client = LmsrMarketClient::new(&env, &contract_id);
 
         let user = Address::generate(&env);
@@ -1269,7 +1269,7 @@ mod test {
     #[test]
     #[should_panic(expected = "Error(Contract, #6)")] // InvalidAmount = 6
     fn test_buy_negative_amount() {
-        let (env, contract_id, oracle, token_address) = setup_test();
+        let (env, contract_id, _oracle, token_address) = setup_test();
         let client = LmsrMarketClient::new(&env, &contract_id);
 
         let user = Address::generate(&env);
@@ -1450,7 +1450,7 @@ mod test {
 
     #[test]
     fn test_sell_all_returns_to_near_equilibrium() {
-        let (env, contract_id, oracle, token_address) = setup_test();
+        let (env, contract_id, _oracle, token_address) = setup_test();
         let client = LmsrMarketClient::new(&env, &contract_id);
 
         let user = Address::generate(&env);
@@ -1490,7 +1490,7 @@ mod test {
 
     #[test]
     fn test_get_sell_quote_basic() {
-        let (env, contract_id, oracle, token_address) = setup_test();
+        let (env, contract_id, _oracle, token_address) = setup_test();
         let client = LmsrMarketClient::new(&env, &contract_id);
 
         let user = Address::generate(&env);
@@ -1506,7 +1506,7 @@ mod test {
 
         assert!(return_amount > 0, "Sell return should be positive");
         assert!(
-            price_after >= 0 && price_after <= SCALE_FACTOR,
+            (0..=SCALE_FACTOR).contains(&price_after),
             "Price after should be in [0, 1]"
         );
     }
@@ -1514,7 +1514,7 @@ mod test {
     #[test]
     #[should_panic(expected = "Error(Contract, #5)")] // InvalidOutcome = 5
     fn test_get_sell_quote_invalid_outcome() {
-        let (env, contract_id, oracle, token_address) = setup_test();
+        let (env, contract_id, _oracle, _token_address) = setup_test();
         let client = LmsrMarketClient::new(&env, &contract_id);
 
         // Try to get sell quote with invalid outcome
