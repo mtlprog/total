@@ -333,7 +333,7 @@ impl LmsrMarket {
 
     /// Claim winnings after market resolution.
     /// Each winning token is redeemable for 1 unit of collateral (1:1 redemption),
-    /// minus a 2% fee that goes to the oracle.
+    /// minus a 2% fee that stays in the pool (recoverable by oracle via withdraw_remaining).
     /// Note: Losing tokens have zero value and are not claimed.
     ///
     /// # Arguments
