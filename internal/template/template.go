@@ -44,6 +44,12 @@ var funcMap = template.FuncMap{
 		}
 		return s[:n] + "..."
 	},
+	"shortID": func(s string) string {
+		if len(s) <= 19 {
+			return s
+		}
+		return s[:8] + "..." + s[len(s)-8:]
+	},
 	"isTestnet": func(passphrase string) bool {
 		return strings.Contains(passphrase, "Test")
 	},

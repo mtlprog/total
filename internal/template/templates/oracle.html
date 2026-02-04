@@ -85,7 +85,7 @@
                             <option value="">Choose a market...</option>
                             {{range .Markets}}
                             {{if not .IsResolved}}
-                            <option value="{{.ID}}">{{truncate .Question 50}} ({{slice .ID 0 8}}...)</option>
+                            <option value="{{.ID}}">{{truncate .Question 50}} ({{shortID .ID}})</option>
                             {{end}}
                             {{end}}
                         </select>
@@ -122,7 +122,7 @@
                             <option value="">Choose a market...</option>
                             {{range .Markets}}
                             {{if .IsResolved}}
-                            <option value="{{.ID}}">{{truncate .Question 50}} ({{slice .ID 0 8}}...)</option>
+                            <option value="{{.ID}}">{{truncate .Question 50}} ({{shortID .ID}})</option>
                             {{end}}
                             {{end}}
                         </select>

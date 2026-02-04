@@ -157,7 +157,7 @@
                 {{if .Market.MetadataHash}}
                 <div class="meta-row">
                     <span>IPFS Hash</span>
-                    <span class="meta-value"><a href="https://gateway.pinata.cloud/ipfs/{{.Market.MetadataHash}}" target="_blank">{{truncate .Market.MetadataHash 20}}</a></span>
+                    <span class="meta-value"><a href="https://gateway.pinata.cloud/ipfs/{{.Market.MetadataHash}}" target="_blank">{{shortID .Market.MetadataHash}}</a></span>
                 </div>
                 {{end}}
             </div>
