@@ -19,6 +19,8 @@ Stellar prediction market platform. Stateless web application that builds Soroba
 - `cargo install --locked stellar-cli` - Install Stellar CLI (v25+, no --features opt)
 - `stellar keys generate oracle --network testnet --fund` - Generate funded testnet keypair
 - `stellar contract id asset --network testnet --asset native` - Get native XLM SAC address
+- `stellar tx sign --sign-with-key <identity> <xdr>` - Sign transaction (not --source)
+- `stellar tx send --network testnet <signed_xdr>` - Send signed transaction
 
 ## Project Structure
 
@@ -113,6 +115,8 @@ The IPFS CID (hash) is stored on-chain via `metadata_hash` parameter.
 - Validate() methods must not mutate receivers (set defaults in caller before validation)
 - Parse user-provided times as UTC for consistent timezone handling
 - Critical Stellar account fields (yes/no codes, liquidity) must error on decode failure, not log and continue
+- urfave/cli doesn't auto-load .env files; call `godotenv.Load()` before `app.Run()`
+- Go templates can't call pointer-receiver methods on values; pass `&struct` not `struct` to template data
 
 ### Soroban
 - All amounts use fixed-point with SCALE_FACTOR = 10^7 (matches Stellar precision)
@@ -124,12 +128,16 @@ The IPFS CID (hash) is stored on-chain via `metadata_hash` parameter.
 - LMSR math uses Taylor series for exp/ln - handle overflow carefully
 - Contract storage uses instance storage for all market state
 - Tokens are internal balances (no Stellar trustlines needed in Soroban mode)
+- Use `txnbuild.NewInfiniteTimeout()` for transactions signed externally (avoid TxTooLate)
+- Contract errors in simulation come as strings like "Error(Contract, #13)"; parse for user messages
 
 ### Soroban Contract Development
 - Use `#![no_std]` - standard library not available
 - All arithmetic must handle overflow (use checked_* methods)
 - Test with `soroban-sdk` testutils feature
 - Deploy with `stellar contract deploy --wasm <path> --source <key> --network testnet`
+- Factory `deploy_v2` requires `__constructor` function in deployed contract
+- Constructor can delegate to `initialize()` for test compatibility: `Self::initialize(...).expect("failed")`
 - Initialize SAC with `stellar contract asset deploy`
 - In tests, `#[should_panic(expected = "...")]` must use error codes like `"Error(Contract, #7)"`, not error names
 - Avoid `.unwrap()` on storage access - use `.ok_or(MarketError::StorageCorrupted)?` for proper error handling
