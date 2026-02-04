@@ -48,7 +48,7 @@
                         {{else}}
                         Volume: {{printf "%.0f" .YesSold}} YES / {{printf "%.0f" .NoSold}} NO
                         {{end}}
-                        <span class="text-muted"> · {{slice .ID 0 8}}...</span>
+                        <span class="text-muted"> · {{shortID .ID}}</span>
                     </div>
                     {{if .MetadataError}}
                     <div class="warning" style="margin-top: 0.75rem; margin-bottom: 0;">{{.MetadataError}}</div>

@@ -95,12 +95,12 @@ type MarketView struct {
 	MetadataError  string // Non-empty when IPFS metadata failed to load
 }
 
-// truncateID safely truncates an ID for display.
-func truncateID(id string, length int) string {
-	if len(id) <= length {
+// shortID formats an ID as "first8...last8" for display.
+func shortID(id string) string {
+	if len(id) <= 19 {
 		return id
 	}
-	return id[:length] + "..."
+	return id[:8] + "..." + id[len(id)-8:]
 }
 
 // handleListMarkets renders the list of all markets from factory.
@@ -189,14 +189,14 @@ func (h *MarketHandler) buildMarketViews(ctx context.Context, states []service.M
 				var metadata model.MarketMetadata
 				if err := h.ipfsClient.GetJSON(ctx, s.MetadataHash, &metadata); err != nil {
 					h.logger.Warn("failed to fetch metadata", "hash", s.MetadataHash, "error", err)
-					view.Question = "Market " + truncateID(s.ContractID, 8)
+					view.Question = "Market " + shortID(s.ContractID)
 					view.MetadataError = "Failed to load market details from IPFS"
 				} else {
 					view.Question = metadata.Question
 					view.Description = metadata.Description
 				}
 			} else {
-				view.Question = "Market " + truncateID(s.ContractID, 8)
+				view.Question = "Market " + shortID(s.ContractID)
 			}
 
 			views[idx] = view
@@ -255,14 +255,14 @@ func (h *MarketHandler) handleMarketDetail(w http.ResponseWriter, r *http.Reques
 		var metadata model.MarketMetadata
 		if err := h.ipfsClient.GetJSON(ctx, state.MetadataHash, &metadata); err != nil {
 			h.logger.Warn("failed to fetch metadata", "hash", state.MetadataHash, "error", err)
-			market.Question = "Market " + truncateID(contractID, 8)
+			market.Question = "Market " + shortID(contractID)
 		} else {
 			market.Question = metadata.Question
 			market.Description = metadata.Description
 		}
 		market.MetadataHash = state.MetadataHash
 	} else {
-		market.Question = "Market " + truncateID(contractID, 8)
+		market.Question = "Market " + shortID(contractID)
 	}
 
 	data := map[string]any{
