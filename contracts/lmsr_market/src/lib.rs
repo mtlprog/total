@@ -352,6 +352,22 @@ impl LmsrMarket {
             .instance()
             .set(&DataKey::WinningOutcome, &winning_outcome);
 
+        // Track total unclaimed winning tokens for withdraw_remaining protection
+        let winning_tokens: i128 = if winning_outcome == OUTCOME_YES {
+            env.storage()
+                .instance()
+                .get(&DataKey::YesSold)
+                .ok_or(MarketError::StorageCorrupted)?
+        } else {
+            env.storage()
+                .instance()
+                .get(&DataKey::NoSold)
+                .ok_or(MarketError::StorageCorrupted)?
+        };
+        env.storage()
+            .instance()
+            .set(&DataKey::UnclaimedWinningTokens, &winning_tokens);
+
         Ok(())
     }
 
@@ -401,6 +417,16 @@ impl LmsrMarket {
         // Zero out user's balance
         env.storage().instance().set(&balance_key, &0i128);
 
+        // Decrement unclaimed winning tokens tracker
+        let unclaimed: i128 = env
+            .storage()
+            .instance()
+            .get(&DataKey::UnclaimedWinningTokens)
+            .unwrap_or(0);
+        env.storage()
+            .instance()
+            .set(&DataKey::UnclaimedWinningTokens, &(unclaimed - winning_balance));
+
         // Update collateral pool (only deduct user_payout, fee stays in pool)
         let pool: i128 = env
             .storage()
@@ -434,9 +460,9 @@ impl LmsrMarket {
 
     /// Withdraw remaining pool after market resolution (oracle only).
     ///
-    /// After a market resolves and winners claim their payouts, there may be
-    /// leftover funds in the pool (from losing bets). This function allows
-    /// the oracle to recover those remaining funds.
+    /// Withdraws only the excess funds (losers' bets + fees) while reserving
+    /// enough collateral for unclaimed winning tokens. This prevents the oracle
+    /// from withdrawing funds that winners haven't claimed yet.
     ///
     /// # Arguments
     /// * `oracle` - Must match the oracle set at initialization
@@ -465,25 +491,41 @@ impl LmsrMarket {
             .get(&DataKey::CollateralPool)
             .ok_or(MarketError::StorageCorrupted)?;
 
-        if pool <= 0 {
+        // Calculate reserved amount for unclaimed winning tokens
+        // Each unclaimed token needs (100% - 2% fee) = 98% of collateral reserved
+        let unclaimed: i128 = env
+            .storage()
+            .instance()
+            .get(&DataKey::UnclaimedWinningTokens)
+            .unwrap_or(0);
+        let reserved = unclaimed
+            .checked_mul(BPS_DENOMINATOR - CLAIM_FEE_BPS)
+            .ok_or(MarketError::Overflow)?
+            .checked_div(BPS_DENOMINATOR)
+            .ok_or(MarketError::Overflow)?;
+
+        // Only withdraw excess (pool minus reserved for unclaimed)
+        let withdrawable = pool.checked_sub(reserved).ok_or(MarketError::Overflow)?;
+
+        if withdrawable <= 0 {
             return Err(MarketError::NothingToClaim);
         }
 
-        // Zero out the pool
+        // Update pool to reserved amount (for future claims)
         env.storage()
             .instance()
-            .set(&DataKey::CollateralPool, &0i128);
+            .set(&DataKey::CollateralPool, &reserved);
 
-        // Transfer remaining pool to oracle
+        // Transfer withdrawable to oracle
         let collateral_token: Address = env
             .storage()
             .instance()
             .get(&DataKey::CollateralToken)
             .ok_or(MarketError::StorageCorrupted)?;
         let token_client = token::Client::new(&env, &collateral_token);
-        token_client.transfer(&env.current_contract_address(), &oracle, &pool);
+        token_client.transfer(&env.current_contract_address(), &oracle, &withdrawable);
 
-        Ok(pool)
+        Ok(withdrawable)
     }
 
     /// Get the current price of an outcome.
@@ -1134,6 +1176,80 @@ mod test {
 
         // Second withdrawal should fail
         client.withdraw_remaining(&oracle); // Should panic
+    }
+
+    #[test]
+    fn test_withdraw_remaining_reserves_for_unclaimed() {
+        let (env, contract_id, oracle, token_address) = setup_test();
+        let client = LmsrMarketClient::new(&env, &contract_id);
+
+        let winner = Address::generate(&env);
+        let loser = Address::generate(&env);
+        let token_admin_client = StellarAssetClient::new(&env, &token_address);
+        token_admin_client.mint(&winner, &(100 * SCALE_FACTOR));
+        token_admin_client.mint(&loser, &(100 * SCALE_FACTOR));
+
+        // Winner buys YES, loser buys NO
+        let yes_cost = client.buy(&winner, &0, &(10 * SCALE_FACTOR), &(50 * SCALE_FACTOR));
+        let no_cost = client.buy(&loser, &1, &(10 * SCALE_FACTOR), &(50 * SCALE_FACTOR));
+
+        // Initial funding is 70 * SCALE_FACTOR
+        let initial_funding = 70 * SCALE_FACTOR;
+        let pool_before = initial_funding + yes_cost + no_cost;
+
+        // Resolve: YES wins
+        client.resolve(&oracle, &0);
+
+        // Winner does NOT claim yet
+        // Oracle tries to withdraw - should only get losers' funds + fees, not winners' reserved funds
+
+        // Reserved for winner: 10 tokens * 98% = 9.8 tokens (unclaimed payout)
+        let winner_tokens = 10 * SCALE_FACTOR;
+        let reserved = winner_tokens * (BPS_DENOMINATOR - CLAIM_FEE_BPS) / BPS_DENOMINATOR;
+
+        // Withdrawable = pool - reserved
+        let expected_withdrawable = pool_before - reserved;
+
+        let withdrawn = client.withdraw_remaining(&oracle);
+        assert_eq!(withdrawn, expected_withdrawable);
+
+        // Pool should now have exactly reserved amount
+        let (_, _, pool_after, _) = client.get_state();
+        assert_eq!(pool_after, reserved);
+
+        // Now winner claims - should still work
+        let payout = client.claim(&winner);
+        assert_eq!(payout, reserved); // Gets exactly what was reserved
+
+        // Pool is now zero
+        let (_, _, pool_final, _) = client.get_state();
+        assert_eq!(pool_final, 0);
+    }
+
+    #[test]
+    fn test_winner_can_claim_after_oracle_withdrawal() {
+        // Verify that the bug is fixed: winner can claim even after oracle withdraws
+        let (env, contract_id, oracle, token_address) = setup_test();
+        let client = LmsrMarketClient::new(&env, &contract_id);
+
+        let winner = Address::generate(&env);
+        let token_admin_client = StellarAssetClient::new(&env, &token_address);
+        token_admin_client.mint(&winner, &(100 * SCALE_FACTOR));
+
+        // Winner buys YES
+        client.buy(&winner, &0, &(10 * SCALE_FACTOR), &(50 * SCALE_FACTOR));
+
+        // Resolve: YES wins
+        client.resolve(&oracle, &0);
+
+        // Oracle withdraws first (before winner claims)
+        let withdrawn = client.withdraw_remaining(&oracle);
+        assert!(withdrawn > 0, "Oracle should withdraw something");
+
+        // Winner claims after oracle withdrawal - THIS USED TO FAIL
+        let payout = client.claim(&winner);
+        let expected = 10 * SCALE_FACTOR * (BPS_DENOMINATOR - CLAIM_FEE_BPS) / BPS_DENOMINATOR;
+        assert_eq!(payout, expected);
     }
 
     // --- Quote validation tests ---

@@ -21,6 +21,8 @@ pub enum DataKey {
     Resolved,
     /// Winning outcome (0 = YES, 1 = NO)
     WinningOutcome,
+    /// Total unclaimed winning tokens (decremented as users claim)
+    UnclaimedWinningTokens,
     /// IPFS metadata hash
     MetadataHash,
     /// User balance for outcome tokens: UserBalance(user, outcome)
