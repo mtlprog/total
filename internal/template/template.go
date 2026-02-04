@@ -34,9 +34,10 @@ var funcMap = template.FuncMap{
 		return a - b
 	},
 	"urlencode": url.QueryEscape,
-	"labURL": func(xdr, network string) string {
-		return fmt.Sprintf("https://lab.stellar.org/?xdr=%s&network=%s",
-			url.QueryEscape(xdr), network)
+	"labURL": func(xdr, networkPassphrase string) string {
+		return "https://lab.stellar.org/transaction/cli-sign?" +
+			"networkPassphrase=" + url.QueryEscape(networkPassphrase) +
+			"&xdr=" + url.QueryEscape(xdr)
 	},
 	"truncate": func(s string, n int) string {
 		if len(s) <= n {

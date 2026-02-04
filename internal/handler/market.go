@@ -387,10 +387,11 @@ func (h *MarketHandler) handleBuildBuyTx(w http.ResponseWriter, r *http.Request)
 
 	// Render XDR result page
 	data := map[string]any{
-		"Result":    result,
-		"MarketID":  contractID,
-		"ActiveNav": "markets",
-		"Network":   h.networkName(),
+		"Result":            result,
+		"MarketID":          contractID,
+		"ActiveNav":         "markets",
+		"Network":           h.networkName(),
+		"NetworkPassphrase": h.networkPassphrase,
 	}
 
 	if err := h.tmpl.Render(w, "transaction", data); err != nil {
@@ -463,10 +464,11 @@ func (h *MarketHandler) handleBuildSellTx(w http.ResponseWriter, r *http.Request
 
 	// Render XDR result page
 	data := map[string]any{
-		"Result":    result,
-		"MarketID":  contractID,
-		"ActiveNav": "markets",
-		"Network":   h.networkName(),
+		"Result":            result,
+		"MarketID":          contractID,
+		"ActiveNav":         "markets",
+		"Network":           h.networkName(),
+		"NetworkPassphrase": h.networkPassphrase,
 	}
 
 	if err := h.tmpl.Render(w, "transaction", data); err != nil {
@@ -504,10 +506,11 @@ func (h *MarketHandler) handleResolveMarket(w http.ResponseWriter, r *http.Reque
 	}
 
 	data := map[string]any{
-		"Result":    result,
-		"MarketID":  contractID,
-		"ActiveNav": "oracle",
-		"Network":   h.networkName(),
+		"Result":            result,
+		"MarketID":          contractID,
+		"ActiveNav":         "oracle",
+		"Network":           h.networkName(),
+		"NetworkPassphrase": h.networkPassphrase,
 	}
 
 	if err := h.tmpl.Render(w, "transaction", data); err != nil {
@@ -544,10 +547,11 @@ func (h *MarketHandler) handleBuildClaimTx(w http.ResponseWriter, r *http.Reques
 	}
 
 	data := map[string]any{
-		"Result":    result,
-		"MarketID":  contractID,
-		"ActiveNav": "markets",
-		"Network":   h.networkName(),
+		"Result":            result,
+		"MarketID":          contractID,
+		"ActiveNav":         "markets",
+		"Network":           h.networkName(),
+		"NetworkPassphrase": h.networkPassphrase,
 	}
 
 	if err := h.tmpl.Render(w, "transaction", data); err != nil {
@@ -584,10 +588,11 @@ func (h *MarketHandler) handleBuildWithdrawTx(w http.ResponseWriter, r *http.Req
 	}
 
 	data := map[string]any{
-		"Result":    result,
-		"MarketID":  contractID,
-		"ActiveNav": "oracle",
-		"Network":   h.networkName(),
+		"Result":            result,
+		"MarketID":          contractID,
+		"ActiveNav":         "oracle",
+		"Network":           h.networkName(),
+		"NetworkPassphrase": h.networkPassphrase,
 	}
 
 	if err := h.tmpl.Render(w, "transaction", data); err != nil {
@@ -696,10 +701,11 @@ func (h *MarketHandler) handleBuildDeployTx(w http.ResponseWriter, r *http.Reque
 	}
 
 	data := map[string]any{
-		"Result":    result,
-		"MarketID":  "new",
-		"ActiveNav": "oracle",
-		"Network":   h.networkName(),
+		"Result":            result,
+		"MarketID":          "new",
+		"ActiveNav":         "oracle",
+		"Network":           h.networkName(),
+		"NetworkPassphrase": h.networkPassphrase,
 	}
 
 	if err := h.tmpl.Render(w, "transaction", data); err != nil {
