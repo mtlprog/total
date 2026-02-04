@@ -3,33 +3,48 @@ package config
 const (
 	DefaultPort = "8080"
 
-	// Stellar configuration
-	DefaultHorizonURL        = "https://horizon.stellar.org"
-	DefaultNetworkPassphrase = "Public Global Stellar Network ; September 2015"
-	DefaultBaseFee           = 100 // stroops
+	// Mainnet configuration
+	MainnetHorizonURL        = "https://horizon.stellar.org"
+	MainnetSorobanRPCURL     = "https://soroban-rpc.stellar.org:443"
+	MainnetNetworkPassphrase = "Public Global Stellar Network ; September 2015"
 
-	// Soroban RPC configuration
-	DefaultSorobanRPCURL     = "https://soroban-rpc.stellar.org:443"
+	// Testnet configuration
+	TestnetHorizonURL        = "https://horizon-testnet.stellar.org"
 	TestnetSorobanRPCURL     = "https://soroban-testnet.stellar.org:443"
 	TestnetNetworkPassphrase = "Test SDF Network ; September 2015"
 
-	// EURMTL issuer on mainnet
-	EURMTLIssuer = "GACKTN5DAZGWXRWB2WLM6OPBDHAMT6SJNGLJZPQMEZBUR4JUGBX2UK7V"
-	EURMTLCode   = "EURMTL"
-
-	// EURMTL Stellar Asset Contract (SAC) address
-	// This is the contract address for EURMTL token on Soroban
-	// Deploy using: stellar contract asset deploy --asset EURMTL:GACKTN5...
-	// Set via environment variable until deployed
-	EURMTLContractID = ""
+	// Default base fee in stroops
+	DefaultBaseFee = 100
 
 	// IPFS configuration
 	DefaultIPFSGateway = "https://gateway.pinata.cloud/ipfs/"
 	PinataAPIURL       = "https://api.pinata.cloud/pinning/pinJSONToIPFS"
 
 	// Market configuration
-	DefaultLiquidityParam   = 100.0
-	InitialTokenSupply      = 1000000.0 // Initial supply of YES/NO tokens
-	MaxAssetCodeLength      = 12
-	MarketAccountMinReserve = 1.5 // XLM needed for market account
+	DefaultLiquidityParam = 100.0
 )
+
+// NetworkConfig holds all network-specific configuration.
+type NetworkConfig struct {
+	HorizonURL        string
+	SorobanRPCURL     string
+	NetworkPassphrase string
+}
+
+// GetNetworkConfig returns configuration for the specified network.
+// Defaults to testnet if network is not "mainnet".
+func GetNetworkConfig(network string) NetworkConfig {
+	if network == "mainnet" {
+		return NetworkConfig{
+			HorizonURL:        MainnetHorizonURL,
+			SorobanRPCURL:     MainnetSorobanRPCURL,
+			NetworkPassphrase: MainnetNetworkPassphrase,
+		}
+	}
+	// Default to testnet
+	return NetworkConfig{
+		HorizonURL:        TestnetHorizonURL,
+		SorobanRPCURL:     TestnetSorobanRPCURL,
+		NetworkPassphrase: TestnetNetworkPassphrase,
+	}
+}

@@ -96,15 +96,13 @@ The IPFS CID (hash) is stored on-chain via `metadata_hash` parameter.
 
 ## Environment Variables
 
-- `ORACLE_PUBLIC_KEY` (required) - Stellar account that creates/resolves markets
-- `SOROBAN_RPC_URL` (required) - Soroban RPC endpoint
-- `HORIZON_URL` - Horizon API URL for account lookups (default: mainnet)
-- `NETWORK_PASSPHRASE` - Stellar network passphrase
+- `NETWORK` - Network to use: `testnet` or `mainnet` (default: testnet). Sets Horizon URL, Soroban RPC URL, and network passphrase automatically.
+- `ORACLE_PUBLIC_KEY` - Stellar account that creates/resolves markets
 - `MARKET_FACTORY_CONTRACT` - Factory contract ID (C...) - required for market listing
-- `PINATA_API_KEY` - Pinata API key for IPFS metadata storage
-- `PINATA_API_SECRET` - Pinata API secret for IPFS metadata storage
+- `PINATA_API_KEY` - Pinata API key for IPFS metadata storage (optional)
+- `PINATA_API_SECRET` - Pinata API secret for IPFS metadata storage (optional)
 - `PORT` - HTTP server port (default: 8080)
-- `LOG_LEVEL` - Log level (debug, info, warn, error)
+- `LOG_LEVEL` - Log level: debug, info, warn, error (default: info)
 
 ## Gotchas
 
@@ -115,7 +113,6 @@ The IPFS CID (hash) is stored on-chain via `metadata_hash` parameter.
 - Validate() methods must not mutate receivers (set defaults in caller before validation)
 - Parse user-provided times as UTC for consistent timezone handling
 - Critical Stellar account fields (yes/no codes, liquidity) must error on decode failure, not log and continue
-- urfave/cli doesn't auto-load .env files; call `godotenv.Load()` before `app.Run()`
 - Go templates can't call pointer-receiver methods on values; pass `&struct` not `struct` to template data
 - Go templates: use composition (`{{template "partial" .}}`), NOT inheritance (`{{define "content"}}...{{template "base"}}`) - multiple templates defining same block name conflict in flat namespace
 - Display IDs/hashes as `first8...last8` format using `shortID()` function (handler + template)
