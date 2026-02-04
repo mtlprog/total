@@ -1,0 +1,31 @@
+{{define "title"}}Error - Total{{end}}
+{{define "description"}}An error occurred{{end}}
+{{define "og_title"}}Error - Total{{end}}
+{{define "og_description"}}An error occurred{{end}}
+
+{{define "content"}}
+<a href="/" class="back-link">← Back to Markets</a>
+
+<div class="error-box">
+    {{if .ErrorCode}}
+    <div class="error-code">Error {{.ErrorCode}}</div>
+    {{end}}
+    <div class="error-message">{{.ErrorMessage}}</div>
+</div>
+
+<div class="panel">
+    <h3 class="panel-title">What You Can Do</h3>
+    <ul style="margin: 0; padding-left: 1.5rem; color: var(--text-dim);">
+        <li>Check that you entered the correct information</li>
+        <li>Ensure your Stellar account exists and is funded</li>
+        <li>Try again in a few moments</li>
+        <li>If the problem persists, check the Stellar network status</li>
+    </ul>
+</div>
+
+<div style="margin-top: 1.5rem;">
+    <a href="/" class="btn">Back to Markets</a>
+</div>
+{{end}}
+
+{{template "base" .}}

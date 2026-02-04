@@ -180,6 +180,7 @@ func runServe(c *cli.Context) error {
 		ipfsClient,
 		tmpl,
 		oraclePublicKey,
+		networkPassphrase,
 		slog.Default(),
 	)
 

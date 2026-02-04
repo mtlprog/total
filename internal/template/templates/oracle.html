@@ -1,0 +1,138 @@
+{{define "title"}}Oracle Admin - Total{{end}}
+{{define "description"}}Deploy, resolve, and manage prediction markets on Total.{{end}}
+{{define "og_title"}}Oracle Admin - Total{{end}}
+{{define "og_description"}}Oracle administration for Total prediction markets{{end}}
+
+{{define "content"}}
+<h1 style="margin: 0 0 1.5rem 0; font-size: 1.25rem;">Oracle Administration</h1>
+
+<div class="panel">
+    <h3 class="panel-title">Oracle Info</h3>
+    <div class="meta">
+        <div class="meta-row">
+            <span>Oracle Public Key</span>
+            <span class="meta-value">{{.OraclePublicKey}}</span>
+        </div>
+        {{if .FactoryContract}}
+        <div class="meta-row">
+            <span>Factory Contract</span>
+            <span class="meta-value">{{.FactoryContract}}</span>
+        </div>
+        {{end}}
+    </div>
+</div>
+
+<div class="panel">
+    <h3 class="panel-title">Deploy New Market</h3>
+    <p class="text-dim mb-2">Deploy a new prediction market via the factory contract.</p>
+
+    <div class="warning mb-3">
+        <strong>Step 1:</strong> First upload your market metadata JSON to IPFS (via <a href="https://app.pinata.cloud/" target="_blank">Pinata</a>).
+        <pre style="margin: 0.75rem 0 0 0; color: var(--text);">{
+  "question": "Will BTC reach $100k by end of 2025?",
+  "description": "Resolution criteria...",
+  "resolution_source": "coinbase.com",
+  "category": "crypto",
+  "end_date": "2025-12-31T23:59:59Z"
+}</pre>
+    </div>
+
+    <form method="POST" action="/deploy">
+        <div class="form-group">
+            <label>IPFS Metadata Hash (CID) *</label>
+            <input type="text" name="metadata_hash" required placeholder="QmXxx... or bafyxxx...">
+            <span class="form-help">The IPFS CID of your uploaded metadata JSON.</span>
+        </div>
+
+        <div class="form-group">
+            <label>Liquidity Parameter (b)</label>
+            <input type="number" name="liquidity_param" value="{{.DefaultLiquidityParam}}" min="1" step="0.01">
+            <span class="form-help">Higher = more liquidity, lower price impact. Recommended: 100-1000.</span>
+        </div>
+
+        <div class="form-group">
+            <label>Initial Funding (collateral tokens)</label>
+            <input type="number" name="initial_funding" value="70" min="1" step="0.01">
+            <span class="form-help">Must be at least 70% of liquidity parameter (b × 0.7).</span>
+        </div>
+
+        <button type="submit" class="btn btn-primary">Generate Deploy Transaction</button>
+    </form>
+</div>
+
+{{if .Markets}}
+<div class="panel">
+    <h3 class="panel-title">Resolve Market</h3>
+    <p class="text-dim mb-2">Resolve an active market by selecting the winning outcome.</p>
+
+    <form method="POST" action="" id="resolve-form">
+        <div class="form-group">
+            <label>Select Market</label>
+            <select name="market_id" required onchange="document.getElementById('resolve-form').action = '/market/' + this.value + '/resolve';">
+                <option value="">Choose a market...</option>
+                {{range .Markets}}
+                {{if not .IsResolved}}
+                <option value="{{.ID}}">{{truncate .Question 50}} ({{slice .ID 0 8}}...)</option>
+                {{end}}
+                {{end}}
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label>Winning Outcome</label>
+            <div class="radio-group">
+                <label class="radio-option">
+                    <input type="radio" name="outcome" value="YES" required>
+                    <span class="text-yes font-bold">YES</span>
+                </label>
+                <label class="radio-option">
+                    <input type="radio" name="outcome" value="NO">
+                    <span class="text-no font-bold">NO</span>
+                </label>
+            </div>
+        </div>
+
+        <button type="submit" class="btn">Generate Resolve Transaction</button>
+    </form>
+</div>
+
+<div class="panel">
+    <h3 class="panel-title">Withdraw Remaining Pool</h3>
+    <p class="text-dim mb-2">After all claims are processed, withdraw any remaining funds (unclaimed winnings, fees, losing bets).</p>
+
+    <form method="POST" action="" id="withdraw-form">
+        <input type="hidden" name="oracle_public_key" value="{{.OraclePublicKey}}">
+
+        <div class="form-group">
+            <label>Select Resolved Market</label>
+            <select name="market_id" required onchange="document.getElementById('withdraw-form').action = '/market/' + this.value + '/withdraw';">
+                <option value="">Choose a market...</option>
+                {{range .Markets}}
+                {{if .IsResolved}}
+                <option value="{{.ID}}">{{truncate .Question 50}} ({{slice .ID 0 8}}...)</option>
+                {{end}}
+                {{end}}
+            </select>
+        </div>
+
+        <button type="submit" class="btn">Generate Withdraw Transaction</button>
+    </form>
+</div>
+{{end}}
+
+<div class="panel">
+    <h3 class="panel-title">How It Works</h3>
+    <ol class="steps">
+        <li>Create metadata JSON with question, description, resolution criteria</li>
+        <li>Upload JSON to IPFS and copy the CID</li>
+        <li>Fill in the deploy form above with IPFS CID and parameters</li>
+        <li>Sign the generated XDR with your oracle wallet</li>
+        <li>Submit the signed transaction to Stellar network</li>
+        <li>Market appears on the markets list automatically</li>
+        <li>When outcome is known, resolve the market</li>
+        <li>After claims period, withdraw remaining pool</li>
+    </ol>
+</div>
+{{end}}
+
+{{template "base" .}}
