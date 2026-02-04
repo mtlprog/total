@@ -6,7 +6,9 @@ mod storage;
 
 use error::MarketError;
 use soroban_sdk::{contract, contractimpl, token, Address, Env, String};
-use storage::{DataKey, OUTCOME_NO, OUTCOME_YES, SCALE_FACTOR};
+use storage::{DataKey, OUTCOME_NO, OUTCOME_YES};
+#[cfg(test)]
+use storage::SCALE_FACTOR;
 
 /// LMSR Prediction Market Contract
 ///
@@ -394,6 +396,58 @@ impl LmsrMarket {
         token_client.transfer(&env.current_contract_address(), &user, &payout);
 
         Ok(payout)
+    }
+
+    /// Withdraw remaining pool after market resolution (oracle only).
+    ///
+    /// After a market resolves and winners claim their payouts, there may be
+    /// leftover funds in the pool (from losing bets). This function allows
+    /// the oracle to recover those remaining funds.
+    ///
+    /// # Arguments
+    /// * `oracle` - Must match the oracle set at initialization
+    ///
+    /// # Returns
+    /// Amount of collateral withdrawn
+    pub fn withdraw_remaining(env: Env, oracle: Address) -> Result<i128, MarketError> {
+        Self::require_initialized(&env)?;
+        Self::require_resolved(&env)?;
+
+        // Verify caller is oracle
+        let stored_oracle: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Oracle)
+            .ok_or(MarketError::StorageCorrupted)?;
+        if oracle != stored_oracle {
+            return Err(MarketError::Unauthorized);
+        }
+        oracle.require_auth();
+
+        // Get remaining pool
+        let pool: i128 = env
+            .storage()
+            .instance()
+            .get(&DataKey::CollateralPool)
+            .ok_or(MarketError::StorageCorrupted)?;
+
+        if pool <= 0 {
+            return Err(MarketError::NothingToClaim);
+        }
+
+        // Zero out the pool
+        env.storage().instance().set(&DataKey::CollateralPool, &0i128);
+
+        // Transfer remaining pool to oracle
+        let collateral_token: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::CollateralToken)
+            .ok_or(MarketError::StorageCorrupted)?;
+        let token_client = token::Client::new(&env, &collateral_token);
+        token_client.transfer(&env.current_contract_address(), &oracle, &pool);
+
+        Ok(pool)
     }
 
     /// Get the current price of an outcome.
@@ -1070,6 +1124,153 @@ mod test {
 
         // Loser tries to claim
         client.claim(&user); // Should panic with NothingToClaim
+    }
+
+    // --- Withdraw remaining tests ---
+
+    #[test]
+    fn test_withdraw_remaining_after_claims() {
+        let (env, contract_id, oracle, token_address) = setup_test();
+        let client = LmsrMarketClient::new(&env, &contract_id);
+
+        let b = 100 * SCALE_FACTOR;
+        let initial_funding = 70 * SCALE_FACTOR;
+
+        client.initialize(
+            &oracle,
+            &token_address,
+            &b,
+            &String::from_str(&env, "QmTest"),
+            &initial_funding,
+        );
+
+        let winner = Address::generate(&env);
+        let loser = Address::generate(&env);
+        let token_admin_client = StellarAssetClient::new(&env, &token_address);
+        token_admin_client.mint(&winner, &(100 * SCALE_FACTOR));
+        token_admin_client.mint(&loser, &(100 * SCALE_FACTOR));
+
+        // Winner buys YES, loser buys NO
+        let yes_cost = client.buy(&winner, &0, &(10 * SCALE_FACTOR), &(50 * SCALE_FACTOR));
+        let no_cost = client.buy(&loser, &1, &(10 * SCALE_FACTOR), &(50 * SCALE_FACTOR));
+
+        // Check pool increased
+        let (_, _, pool_before, _) = client.get_state();
+        assert_eq!(pool_before, initial_funding + yes_cost + no_cost);
+
+        // Resolve: YES wins
+        client.resolve(&oracle, &0);
+
+        // Winner claims
+        let payout = client.claim(&winner);
+        assert_eq!(payout, 10 * SCALE_FACTOR); // 1:1 redemption
+
+        // Pool should have remaining funds (loser's money + part of initial funding)
+        let (_, _, pool_after_claim, _) = client.get_state();
+        assert!(pool_after_claim > 0, "Pool should have remaining funds");
+
+        // Oracle withdraws remaining
+        let withdrawn = client.withdraw_remaining(&oracle);
+        assert_eq!(withdrawn, pool_after_claim);
+
+        // Pool should be zero now
+        let (_, _, pool_final, _) = client.get_state();
+        assert_eq!(pool_final, 0);
+    }
+
+    #[test]
+    fn test_withdraw_remaining_no_trades() {
+        let (env, contract_id, oracle, token_address) = setup_test();
+        let client = LmsrMarketClient::new(&env, &contract_id);
+
+        let b = 100 * SCALE_FACTOR;
+        let initial_funding = 70 * SCALE_FACTOR;
+
+        client.initialize(
+            &oracle,
+            &token_address,
+            &b,
+            &String::from_str(&env, "QmTest"),
+            &initial_funding,
+        );
+
+        // No trades, just resolve
+        client.resolve(&oracle, &0);
+
+        // Oracle can withdraw entire initial funding
+        let withdrawn = client.withdraw_remaining(&oracle);
+        assert_eq!(withdrawn, initial_funding);
+    }
+
+    #[test]
+    #[should_panic(expected = "Error(Contract, #4)")] // NotResolved = 4
+    fn test_withdraw_remaining_before_resolve() {
+        let (env, contract_id, oracle, token_address) = setup_test();
+        let client = LmsrMarketClient::new(&env, &contract_id);
+
+        let b = 100 * SCALE_FACTOR;
+        let initial_funding = 70 * SCALE_FACTOR;
+
+        client.initialize(
+            &oracle,
+            &token_address,
+            &b,
+            &String::from_str(&env, "QmTest"),
+            &initial_funding,
+        );
+
+        // Try to withdraw before resolution
+        client.withdraw_remaining(&oracle); // Should panic
+    }
+
+    #[test]
+    #[should_panic(expected = "Error(Contract, #10)")] // Unauthorized = 10
+    fn test_withdraw_remaining_non_oracle() {
+        let (env, contract_id, oracle, token_address) = setup_test();
+        let client = LmsrMarketClient::new(&env, &contract_id);
+
+        let b = 100 * SCALE_FACTOR;
+        let initial_funding = 70 * SCALE_FACTOR;
+
+        client.initialize(
+            &oracle,
+            &token_address,
+            &b,
+            &String::from_str(&env, "QmTest"),
+            &initial_funding,
+        );
+
+        client.resolve(&oracle, &0);
+
+        // Non-oracle tries to withdraw
+        let attacker = Address::generate(&env);
+        client.withdraw_remaining(&attacker); // Should panic
+    }
+
+    #[test]
+    #[should_panic(expected = "Error(Contract, #13)")] // NothingToClaim = 13
+    fn test_withdraw_remaining_twice() {
+        let (env, contract_id, oracle, token_address) = setup_test();
+        let client = LmsrMarketClient::new(&env, &contract_id);
+
+        let b = 100 * SCALE_FACTOR;
+        let initial_funding = 70 * SCALE_FACTOR;
+
+        client.initialize(
+            &oracle,
+            &token_address,
+            &b,
+            &String::from_str(&env, "QmTest"),
+            &initial_funding,
+        );
+
+        client.resolve(&oracle, &0);
+
+        // First withdrawal succeeds
+        client.withdraw_remaining(&oracle);
+
+        // Second withdrawal should fail
+        client.withdraw_remaining(&oracle); // Should panic
     }
 
     // --- Quote validation tests ---

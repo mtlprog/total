@@ -311,6 +311,21 @@ stellar contract invoke \
 # Result: User claimed 5 XLM for 5 winning YES tokens
 ```
 
+### Withdraw Remaining Pool (Oracle Only)
+
+```bash
+stellar contract invoke \
+  --id CBQ6R2U6P3VAADKHVI7VT26OYBMNVX3CHXU6ADI2GSKXTJXOG5I762TG \
+  --source oracle \
+  --network testnet \
+  -- \
+  withdraw_remaining \
+  --oracle GAMENVJIEUAD7U6ZB5BTPE4ENCWHZJRT3NJDS2S3JSIJGY76UGMUSGEU
+# Output: "671748500"
+# Event: transfer remaining pool from contract to oracle
+# Result: Oracle recovered ~67.17 XLM (leftover from losers + initial funding)
+```
+
 ### Final State After All Operations
 
 ```bash
@@ -396,6 +411,7 @@ stellar contract invoke \
 | `get_sell_quote` | Get sell quote | None | `(i128, i128)` (return, price_after) |
 | `get_balance` | Get user balance | None | `i128` |
 | `get_state` | Get market state | None | `(i128, i128, i128, bool)` |
+| `withdraw_remaining` | Withdraw leftover pool after resolution | Oracle | `i128` |
 
 ### MarketFactory Functions
 

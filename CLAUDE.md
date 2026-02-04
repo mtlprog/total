@@ -172,6 +172,7 @@ Examples:
 - `sell(user, outcome, amount, min_return)` - Sell tokens, returns actual return
 - `resolve(oracle, winning_outcome)` - Oracle resolves market
 - `claim(user)` - Claim winnings after resolution
+- `withdraw_remaining(oracle)` - Withdraw leftover pool after resolution (oracle only)
 - `get_price(outcome)` - Get current price (0-SCALE_FACTOR)
 - `get_quote(outcome, amount)` - Get buy quote (cost, price_after)
 - `get_sell_quote(outcome, amount)` - Get sell quote (return_amount, price_after)
