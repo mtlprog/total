@@ -20,6 +20,9 @@ coverage.out
 # Playwright MCP
 .playwright-mcp/
 
+# Soroban contracts build artifacts
+contracts/target/
+contracts/*/test_snapshots/
+
 # Alternative code of conduct (project uses CODE_OF_ETHICS.md)
 CODE_OF_CONDUCT.md
-.env
