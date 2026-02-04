@@ -143,7 +143,7 @@ The IPFS CID (hash) is stored on-chain via `metadata_hash` parameter.
 - Avoid `.unwrap()` on storage access - use `.ok_or(MarketError::StorageCorrupted)?` for proper error handling
 - Always guard pool subtraction: `if pool < amount { return Err(MarketError::InsufficientPool); }`
 - Document token_client.transfer() panics with comments (they can fail on insufficient balance)
-- Error codes: NotInitialized=#2, AlreadyResolved=#3, NotResolved=#4, InvalidOutcome=#5, InvalidAmount=#6, InsufficientBalance=#7, SlippageExceeded=#8, ReturnTooLow=#9, Unauthorized=#10, InvalidLiquidity=#11, Overflow=#12, NothingToClaim=#13, StorageCorrupted=#14, InsufficientPool=#15
+- Error codes: AlreadyInitialized=#1, NotInitialized=#2, AlreadyResolved=#3, NotResolved=#4, InvalidOutcome=#5, InvalidAmount=#6, InsufficientBalance=#7, SlippageExceeded=#8, ReturnTooLow=#9, Unauthorized=#10, InvalidLiquidity=#11, Overflow=#12, NothingToClaim=#13, StorageCorrupted=#14, InsufficientPool=#15
 - Initial funding must exceed `b * ln(2)` slightly (use 700000000 for b=1000000000, not 693147180)
 - Collateral token is configurable - can use XLM (native), EURMTL, USDC, or any SAC
 - Native XLM SAC on testnet: `CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC`

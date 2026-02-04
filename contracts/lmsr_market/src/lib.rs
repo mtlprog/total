@@ -6,7 +6,7 @@ mod storage;
 
 use error::MarketError;
 use soroban_sdk::{contract, contractimpl, token, Address, Env, String};
-use storage::{DataKey, OUTCOME_NO, OUTCOME_YES, BPS_DENOMINATOR, CLAIM_FEE_BPS};
+use storage::{DataKey, is_valid_outcome, OUTCOME_YES, OUTCOME_NO, BPS_DENOMINATOR, CLAIM_FEE_BPS};
 #[cfg(test)]
 use storage::SCALE_FACTOR;
 
@@ -133,7 +133,7 @@ impl LmsrMarket {
         Self::require_initialized(&env)?;
         Self::require_not_resolved(&env)?;
 
-        if outcome != OUTCOME_YES && outcome != OUTCOME_NO {
+        if !is_valid_outcome(outcome) {
             return Err(MarketError::InvalidOutcome);
         }
         if amount <= 0 {
@@ -229,7 +229,7 @@ impl LmsrMarket {
         Self::require_initialized(&env)?;
         Self::require_not_resolved(&env)?;
 
-        if outcome != OUTCOME_YES && outcome != OUTCOME_NO {
+        if !is_valid_outcome(outcome) {
             return Err(MarketError::InvalidOutcome);
         }
         if amount <= 0 {
@@ -324,7 +324,7 @@ impl LmsrMarket {
         Self::require_initialized(&env)?;
         Self::require_not_resolved(&env)?;
 
-        if winning_outcome != OUTCOME_YES && winning_outcome != OUTCOME_NO {
+        if !is_valid_outcome(winning_outcome) {
             return Err(MarketError::InvalidOutcome);
         }
 
@@ -513,7 +513,7 @@ impl LmsrMarket {
         Self::require_initialized(&env)?;
         Self::require_not_resolved(&env)?;
 
-        if outcome != OUTCOME_YES && outcome != OUTCOME_NO {
+        if !is_valid_outcome(outcome) {
             return Err(MarketError::InvalidOutcome);
         }
         if amount <= 0 {
@@ -562,7 +562,7 @@ impl LmsrMarket {
         Self::require_initialized(&env)?;
         Self::require_not_resolved(&env)?;
 
-        if outcome != OUTCOME_YES && outcome != OUTCOME_NO {
+        if !is_valid_outcome(outcome) {
             return Err(MarketError::InvalidOutcome);
         }
         if amount <= 0 {

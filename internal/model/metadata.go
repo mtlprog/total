@@ -2,6 +2,19 @@ package model
 
 import "time"
 
+// NewMarketMetadata creates a new MarketMetadata with required fields validated.
+// Question is required and must not exceed MaxQuestionLength.
+func NewMarketMetadata(question string) (*MarketMetadata, error) {
+	m := &MarketMetadata{
+		Question:  question,
+		CreatedAt: time.Now().UTC(),
+	}
+	if err := m.Validate(); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 // MarketMetadata is the JSON structure stored in IPFS.
 // This contains human-readable market information.
 type MarketMetadata struct {

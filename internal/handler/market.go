@@ -80,6 +80,7 @@ type MarketView struct {
 	MetadataHash   string
 	YesAsset       string
 	NoAsset        string
+	MetadataError  string // Non-empty when IPFS metadata failed to load
 }
 
 // truncateID safely truncates an ID for display.
@@ -171,6 +172,7 @@ func (h *MarketHandler) buildMarketViews(ctx context.Context, states []service.M
 				if err := h.ipfsClient.GetJSON(ctx, s.MetadataHash, &metadata); err != nil {
 					h.logger.Warn("failed to fetch metadata", "hash", s.MetadataHash, "error", err)
 					view.Question = "Market " + truncateID(s.ContractID, 8)
+					view.MetadataError = "Failed to load market details from IPFS"
 				} else {
 					view.Question = metadata.Question
 					view.Description = metadata.Description
@@ -204,8 +206,12 @@ func (h *MarketHandler) handleMarketDetail(w http.ResponseWriter, r *http.Reques
 
 	// Get market state
 	states, err := h.factoryService.GetMarketStates(ctx, []string{contractID})
-	if err != nil || len(states) == 0 {
+	if err != nil {
 		h.logger.Error("failed to get market state", "contract_id", contractID, "error", err)
+		h.writeError(w, err, "contract_id", contractID)
+		return
+	}
+	if len(states) == 0 {
 		http.Error(w, "Market not found", http.StatusNotFound)
 		return
 	}
@@ -731,6 +737,8 @@ func mapError(err error) errorResponse {
 func mapContractError(errStr string) errorResponse {
 	// Extract error code from string like "Error(Contract, #13)"
 	switch {
+	case strings.Contains(errStr, "#1"):
+		return errorResponse{"Contract is already initialized.", http.StatusConflict}
 	case strings.Contains(errStr, "#2"):
 		return errorResponse{"Contract is not initialized.", http.StatusBadRequest}
 	case strings.Contains(errStr, "#3"):
@@ -760,7 +768,7 @@ func mapContractError(errStr string) errorResponse {
 	case strings.Contains(errStr, "#15"):
 		return errorResponse{"Insufficient pool balance.", http.StatusBadRequest}
 	default:
-		return errorResponse{"Contract error occurred.", http.StatusBadRequest}
+		return errorResponse{fmt.Sprintf("Contract error occurred: %s", errStr), http.StatusBadRequest}
 	}
 }
 

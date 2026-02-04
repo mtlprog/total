@@ -105,6 +105,11 @@
             color: var(--text-muted);
             padding: 3rem;
         }
+        .warning {
+            color: #f59e0b;
+            font-size: 0.8rem;
+            margin-top: 0.5rem;
+        }
         .btn {
             display: inline-block;
             padding: 0.5rem 1rem;
@@ -156,6 +161,9 @@
                     {{end}}
                     • ID: {{slice .ID 0 8}}...
                 </div>
+                {{if .MetadataError}}
+                <div class="warning">⚠ {{.MetadataError}}</div>
+                {{end}}
             </div>
             {{end}}
         {{else}}
