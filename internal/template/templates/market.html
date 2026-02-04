@@ -1,153 +1,168 @@
-{{define "title"}}{{.Market.Question}} - Total{{end}}
-{{define "description"}}Trade on: {{.Market.Question}}. Current YES price: {{printf "%.1f" (mul .Market.PriceYes 100)}}%{{end}}
-{{define "og_title"}}{{.Market.Question}}{{end}}
-{{define "og_description"}}Prediction market on Stellar - YES: {{printf "%.1f" (mul .Market.PriceYes 100)}}% / NO: {{printf "%.1f" (mul .Market.PriceNo 100)}}%{{end}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{.Market.Question}} - Total</title>
+    <meta name="description" content="Trade on: {{.Market.Question}}. Current YES price: {{printf "%.1f" (mul .Market.PriceYes 100)}}%">
+    <meta property="og:title" content="{{.Market.Question}}">
+    <meta property="og:description" content="Prediction market on Stellar - YES: {{printf "%.1f" (mul .Market.PriceYes 100)}}% / NO: {{printf "%.1f" (mul .Market.PriceNo 100)}}%">
+    <meta property="og:type" content="website">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    {{template "styles" .}}
+</head>
+<body>
+    <div class="container">
+        {{template "header" .}}
+        <main class="main">
+            <a href="/" class="back-link">← Back to Markets</a>
 
-{{define "content"}}
-<a href="/" class="back-link">← Back to Markets</a>
+            <h1 style="margin: 0 0 0.5rem 0; font-size: 1.25rem;">{{.Market.Question}}</h1>
+            {{if .Market.Description}}
+            <p class="text-dim mb-3">{{.Market.Description}}</p>
+            {{end}}
 
-<h1 style="margin: 0 0 0.5rem 0; font-size: 1.25rem;">{{.Market.Question}}</h1>
-{{if .Market.Description}}
-<p class="text-dim mb-3">{{.Market.Description}}</p>
-{{end}}
-
-{{if .Market.IsResolved}}
-<div class="resolved-banner {{if eq .Market.Resolution.String "YES"}}yes{{else}}no{{end}}">
-    MARKET RESOLVED: <strong>{{.Market.Resolution}}</strong> WINS
-</div>
-{{end}}
-
-<div class="panel">
-    <h3 class="panel-title">Current Prices</h3>
-    <div class="prices">
-        <div class="price">
-            <span class="price-label">YES</span>
-            <span class="price-value price-yes price-lg">{{printf "%.1f" (mul .Market.PriceYes 100)}}%</span>
-        </div>
-        <div class="price">
-            <span class="price-label">NO</span>
-            <span class="price-value price-no price-lg">{{printf "%.1f" (mul .Market.PriceNo 100)}}%</span>
-        </div>
-    </div>
-    {{if .BarChart}}<pre class="bar-chart">{{.BarChart}}</pre>{{end}}
-</div>
-
-{{if .PriceChart}}
-<div class="panel">
-    <h3 class="panel-title">Price History</h3>
-    <pre style="font-size: 0.7rem; line-height: 1.2;">{{.PriceChart}}</pre>
-</div>
-{{end}}
-
-{{if not .Market.IsResolved}}
-<div class="panel">
-    <h3 class="panel-title">Buy Outcome Tokens</h3>
-    <form method="POST" action="/market/{{.Market.ID}}/buy">
-        <div class="form-group">
-            <label>Your Stellar Public Key</label>
-            <input type="text" name="user_public_key" placeholder="G..." required pattern="G[A-Z2-7]{55}">
-        </div>
-
-        <div class="form-group">
-            <label>Outcome</label>
-            <div class="radio-group">
-                <label class="radio-option">
-                    <input type="radio" name="outcome" value="YES" required>
-                    <span class="text-yes font-bold">YES</span>
-                </label>
-                <label class="radio-option">
-                    <input type="radio" name="outcome" value="NO">
-                    <span class="text-no font-bold">NO</span>
-                </label>
+            {{if .Market.IsResolved}}
+            <div class="resolved-banner {{if eq .Market.Resolution.String "YES"}}yes{{else}}no{{end}}">
+                MARKET RESOLVED: <strong>{{.Market.Resolution}}</strong> WINS
             </div>
-        </div>
+            {{end}}
 
-        <div class="form-group">
-            <label>Amount (tokens)</label>
-            <input type="number" name="amount" min="0.01" step="0.01" value="10" required>
-        </div>
-
-        <button type="submit" class="btn btn-primary">Get Buy Transaction</button>
-    </form>
-</div>
-
-<div class="panel">
-    <h3 class="panel-title">Sell Outcome Tokens</h3>
-    <form method="POST" action="/market/{{.Market.ID}}/sell">
-        <div class="form-group">
-            <label>Your Stellar Public Key</label>
-            <input type="text" name="user_public_key" placeholder="G..." required pattern="G[A-Z2-7]{55}">
-        </div>
-
-        <div class="form-group">
-            <label>Outcome</label>
-            <div class="radio-group">
-                <label class="radio-option">
-                    <input type="radio" name="outcome" value="YES" required>
-                    <span class="text-yes font-bold">YES</span>
-                </label>
-                <label class="radio-option">
-                    <input type="radio" name="outcome" value="NO">
-                    <span class="text-no font-bold">NO</span>
-                </label>
+            <div class="panel">
+                <h3 class="panel-title">Current Prices</h3>
+                <div class="prices">
+                    <div class="price">
+                        <span class="price-label">YES</span>
+                        <span class="price-value price-yes price-lg">{{printf "%.1f" (mul .Market.PriceYes 100)}}%</span>
+                    </div>
+                    <div class="price">
+                        <span class="price-label">NO</span>
+                        <span class="price-value price-no price-lg">{{printf "%.1f" (mul .Market.PriceNo 100)}}%</span>
+                    </div>
+                </div>
+                {{if .BarChart}}<pre class="bar-chart">{{.BarChart}}</pre>{{end}}
             </div>
-        </div>
 
-        <div class="form-group">
-            <label>Amount (tokens to sell)</label>
-            <input type="number" name="amount" min="0.01" step="0.01" value="10" required>
-        </div>
+            {{if .PriceChart}}
+            <div class="panel">
+                <h3 class="panel-title">Price History</h3>
+                <pre style="font-size: 0.7rem; line-height: 1.2;">{{.PriceChart}}</pre>
+            </div>
+            {{end}}
 
-        <button type="submit" class="btn">Get Sell Transaction</button>
-    </form>
-</div>
-{{else}}
-<div class="panel">
-    <h3 class="panel-title">Claim Winnings</h3>
-    <p class="text-dim mb-2">If you hold winning tokens ({{.Market.Resolution}}), you can claim your collateral.</p>
-    <form method="POST" action="/market/{{.Market.ID}}/claim">
-        <div class="form-group">
-            <label>Your Stellar Public Key</label>
-            <input type="text" name="user_public_key" placeholder="G..." required pattern="G[A-Z2-7]{55}">
-        </div>
-        <button type="submit" class="btn btn-yes">Get Claim Transaction</button>
-    </form>
-</div>
-{{end}}
+            {{if not .Market.IsResolved}}
+            <div class="panel">
+                <h3 class="panel-title">Buy Outcome Tokens</h3>
+                <form method="POST" action="/market/{{.Market.ID}}/buy">
+                    <div class="form-group">
+                        <label>Your Stellar Public Key</label>
+                        <input type="text" name="user_public_key" placeholder="G..." required pattern="G[A-Z2-7]{55}">
+                    </div>
 
-<div class="panel meta">
-    <h3 class="panel-title">Market Details</h3>
-    <div class="meta-row">
-        <span>Market ID</span>
-        <span class="meta-value">{{.Market.ID}}</span>
-    </div>
-    <div class="meta-row">
-        <span>YES Token</span>
-        <span class="meta-value">{{.Market.YesAsset}}</span>
-    </div>
-    <div class="meta-row">
-        <span>NO Token</span>
-        <span class="meta-value">{{.Market.NoAsset}}</span>
-    </div>
-    <div class="meta-row">
-        <span>Liquidity (b)</span>
-        <span class="meta-value">{{printf "%.0f" .Market.LiquidityParam}}</span>
-    </div>
-    <div class="meta-row">
-        <span>Volume YES</span>
-        <span class="meta-value">{{printf "%.2f" .Market.YesSold}} tokens</span>
-    </div>
-    <div class="meta-row">
-        <span>Volume NO</span>
-        <span class="meta-value">{{printf "%.2f" .Market.NoSold}} tokens</span>
-    </div>
-    {{if .Market.MetadataHash}}
-    <div class="meta-row">
-        <span>IPFS Hash</span>
-        <span class="meta-value"><a href="https://gateway.pinata.cloud/ipfs/{{.Market.MetadataHash}}" target="_blank">{{truncate .Market.MetadataHash 20}}</a></span>
-    </div>
-    {{end}}
-</div>
-{{end}}
+                    <div class="form-group">
+                        <label>Outcome</label>
+                        <div class="radio-group">
+                            <label class="radio-option">
+                                <input type="radio" name="outcome" value="YES" required>
+                                <span class="text-yes font-bold">YES</span>
+                            </label>
+                            <label class="radio-option">
+                                <input type="radio" name="outcome" value="NO">
+                                <span class="text-no font-bold">NO</span>
+                            </label>
+                        </div>
+                    </div>
 
-{{template "base" .}}
+                    <div class="form-group">
+                        <label>Amount (tokens)</label>
+                        <input type="number" name="amount" min="0.01" step="0.01" value="10" required>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary">Get Buy Transaction</button>
+                </form>
+            </div>
+
+            <div class="panel">
+                <h3 class="panel-title">Sell Outcome Tokens</h3>
+                <form method="POST" action="/market/{{.Market.ID}}/sell">
+                    <div class="form-group">
+                        <label>Your Stellar Public Key</label>
+                        <input type="text" name="user_public_key" placeholder="G..." required pattern="G[A-Z2-7]{55}">
+                    </div>
+
+                    <div class="form-group">
+                        <label>Outcome</label>
+                        <div class="radio-group">
+                            <label class="radio-option">
+                                <input type="radio" name="outcome" value="YES" required>
+                                <span class="text-yes font-bold">YES</span>
+                            </label>
+                            <label class="radio-option">
+                                <input type="radio" name="outcome" value="NO">
+                                <span class="text-no font-bold">NO</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Amount (tokens to sell)</label>
+                        <input type="number" name="amount" min="0.01" step="0.01" value="10" required>
+                    </div>
+
+                    <button type="submit" class="btn">Get Sell Transaction</button>
+                </form>
+            </div>
+            {{else}}
+            <div class="panel">
+                <h3 class="panel-title">Claim Winnings</h3>
+                <p class="text-dim mb-2">If you hold winning tokens ({{.Market.Resolution}}), you can claim your collateral.</p>
+                <form method="POST" action="/market/{{.Market.ID}}/claim">
+                    <div class="form-group">
+                        <label>Your Stellar Public Key</label>
+                        <input type="text" name="user_public_key" placeholder="G..." required pattern="G[A-Z2-7]{55}">
+                    </div>
+                    <button type="submit" class="btn btn-yes">Get Claim Transaction</button>
+                </form>
+            </div>
+            {{end}}
+
+            <div class="panel meta">
+                <h3 class="panel-title">Market Details</h3>
+                <div class="meta-row">
+                    <span>Market ID</span>
+                    <span class="meta-value">{{.Market.ID}}</span>
+                </div>
+                <div class="meta-row">
+                    <span>YES Token</span>
+                    <span class="meta-value">{{.Market.YesAsset}}</span>
+                </div>
+                <div class="meta-row">
+                    <span>NO Token</span>
+                    <span class="meta-value">{{.Market.NoAsset}}</span>
+                </div>
+                <div class="meta-row">
+                    <span>Liquidity (b)</span>
+                    <span class="meta-value">{{printf "%.0f" .Market.LiquidityParam}}</span>
+                </div>
+                <div class="meta-row">
+                    <span>Volume YES</span>
+                    <span class="meta-value">{{printf "%.2f" .Market.YesSold}} tokens</span>
+                </div>
+                <div class="meta-row">
+                    <span>Volume NO</span>
+                    <span class="meta-value">{{printf "%.2f" .Market.NoSold}} tokens</span>
+                </div>
+                {{if .Market.MetadataHash}}
+                <div class="meta-row">
+                    <span>IPFS Hash</span>
+                    <span class="meta-value"><a href="https://gateway.pinata.cloud/ipfs/{{.Market.MetadataHash}}" target="_blank">{{truncate .Market.MetadataHash 20}}</a></span>
+                </div>
+                {{end}}
+            </div>
+        </main>
+    </div>
+    {{template "footer" .}}
+</body>
+</html>

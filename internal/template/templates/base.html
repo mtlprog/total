@@ -1,565 +1,175 @@
-{{define "base"}}
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{block "title" .}}Total - Prediction Markets{{end}}</title>
-    <meta name="description" content="{{block "description" .}}Decentralized prediction markets on Stellar. Trade on future outcomes using LMSR automated market maker.{{end}}">
-    <meta property="og:title" content="{{block "og_title" .}}Total - Prediction Markets{{end}}">
-    <meta property="og:description" content="{{block "og_description" .}}Decentralized prediction markets on Stellar{{end}}">
-    <meta property="og:type" content="website">
-    <meta name="twitter:card" content="summary">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
-    <style>
+{{define "styles"}}
+<style>
+    :root {
+        /* Ghost in the Shell inspired dark theme - cyan/teal tech aesthetic */
+        --bg: #0a1628;
+        --bg-panel: #0d1b2a;
+        --bg-card: #1b263b;
+        --border: #2d4a5e;
+        --text: #e0f4ff;
+        --text-dim: #8ec8e8;
+        --text-muted: #5a8fa8;
+        --accent: #00d4ff;
+        --accent-dim: #00a8cc;
+        --yes: #00ff9f;
+        --no: #ff4757;
+        --link: #00d4ff;
+        --warning: #ffb74d;
+        --font-mono: 'JetBrains Mono', 'SF Mono', 'Monaco', monospace;
+        --scanline-opacity: 0.02;
+    }
+
+    @media (prefers-color-scheme: light) {
         :root {
-            --bg: #0d0f0d;
-            --bg-panel: #141814;
-            --bg-card: #1a1e1a;
-            --border: #2a3a2a;
-            --text: #d4e4d4;
-            --text-dim: #a0b0a0;
-            --text-muted: #607060;
-            --accent: #00cc66;
-            --accent-dim: #009944;
-            --yes: #22c55e;
-            --no: #ef4444;
-            --link: #58a6ff;
-            --warning: #f0b429;
-            --font-mono: 'JetBrains Mono', 'SF Mono', 'Monaco', monospace;
-            --scanline-opacity: 0.03;
-        }
-
-        @media (prefers-color-scheme: light) {
-            :root {
-                --bg: #f5f7f5;
-                --bg-panel: #ffffff;
-                --bg-card: #fafcfa;
-                --border: #d0dcd0;
-                --text: #1a2a1a;
-                --text-dim: #4a5a4a;
-                --text-muted: #6a7a6a;
-                --accent: #059669;
-                --accent-dim: #047857;
-                --yes: #16a34a;
-                --no: #dc2626;
-                --link: #2563eb;
-                --scanline-opacity: 0;
-            }
-        }
-
-        *, *::before, *::after {
-            box-sizing: border-box;
-        }
-
-        html {
-            font-size: 16px;
-        }
-
-        body {
-            font-family: var(--font-mono);
-            background: var(--bg);
-            color: var(--text);
-            margin: 0;
-            padding: 0;
-            line-height: 1.6;
-            min-height: 100vh;
-            position: relative;
-        }
-
-        body::before {
-            content: "";
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            pointer-events: none;
-            background: repeating-linear-gradient(
-                0deg,
-                transparent,
-                transparent 2px,
-                rgba(0, 204, 102, var(--scanline-opacity)) 2px,
-                rgba(0, 204, 102, var(--scanline-opacity)) 4px
-            );
-            z-index: 9999;
-        }
-
-        .container {
-            max-width: 900px;
-            margin: 0 auto;
-            padding: 2rem;
-        }
-
-        /* Header */
-        .header {
-            border-bottom: 1px solid var(--border);
-            margin-bottom: 2rem;
-            padding-bottom: 1rem;
-        }
-
-        .header-title {
-            font-size: 1.5rem;
-            font-weight: 700;
-            color: var(--accent);
-            margin: 0 0 1rem 0;
-            letter-spacing: 0.05em;
-        }
-
-        .header-title a {
-            color: inherit;
-            text-decoration: none;
-        }
-
-        /* Navigation */
-        .nav {
-            display: flex;
-            gap: 2rem;
-        }
-
-        .nav a {
-            color: var(--text-dim);
-            text-decoration: none;
-            font-size: 0.9rem;
-            padding: 0.25rem 0;
-            border-bottom: 2px solid transparent;
-            transition: color 0.15s, border-color 0.15s;
-        }
-
-        .nav a:hover {
-            color: var(--accent);
-        }
-
-        .nav a.active {
-            color: var(--accent);
-            border-bottom-color: var(--accent);
-        }
-
-        /* Main content */
-        .main {
-            min-height: calc(100vh - 200px);
-        }
-
-        /* Panels */
-        .panel {
-            background: var(--bg-panel);
-            border: 1px solid var(--border);
-            border-left: 3px solid var(--accent);
-            padding: 1.5rem;
-            margin-bottom: 1.5rem;
-        }
-
-        .panel-title {
-            color: var(--text-muted);
-            font-size: 0.8rem;
-            text-transform: uppercase;
-            letter-spacing: 0.1em;
-            margin: 0 0 1rem 0;
-        }
-
-        /* Cards */
-        .card {
-            background: var(--bg-card);
-            border: 1px solid var(--border);
-            padding: 1.25rem;
-            margin-bottom: 1rem;
-            transition: border-color 0.15s;
-        }
-
-        .card:hover {
-            border-color: var(--accent);
-        }
-
-        .card-title {
-            font-size: 1rem;
-            margin: 0 0 0.75rem 0;
-            color: var(--text);
-        }
-
-        .card-title a {
-            color: inherit;
-            text-decoration: none;
-        }
-
-        .card-title a:hover {
-            color: var(--accent);
-        }
-
-        /* Prices */
-        .prices {
-            display: flex;
-            gap: 2rem;
-            margin-bottom: 0.75rem;
-        }
-
-        .price {
-            display: flex;
-            align-items: baseline;
-            gap: 0.5rem;
-        }
-
-        .price-label {
-            color: var(--text-muted);
-            font-size: 0.85rem;
-        }
-
-        .price-value {
-            font-weight: 700;
-            font-size: 1.1rem;
-        }
-
-        .price-yes {
-            color: var(--yes);
-        }
-
-        .price-no {
-            color: var(--no);
-        }
-
-        .price-lg {
-            font-size: 2rem;
-        }
-
-        /* Buttons */
-        .btn {
-            display: inline-block;
-            background: transparent;
-            border: 1px solid var(--accent);
-            color: var(--accent);
-            padding: 0.75rem 1.5rem;
-            font-family: var(--font-mono);
-            font-size: 0.9rem;
-            cursor: pointer;
-            text-decoration: none;
-            transition: background 0.15s, color 0.15s;
-        }
-
-        .btn:hover {
-            background: var(--accent);
-            color: var(--bg);
-        }
-
-        .btn-yes {
-            border-color: var(--yes);
-            color: var(--yes);
-        }
-
-        .btn-yes:hover {
-            background: var(--yes);
-            color: #000;
-        }
-
-        .btn-no {
-            border-color: var(--no);
-            color: var(--no);
-        }
-
-        .btn-no:hover {
-            background: var(--no);
-            color: #fff;
-        }
-
-        .btn-primary {
-            background: var(--accent);
-            color: var(--bg);
-        }
-
-        .btn-primary:hover {
-            background: var(--accent-dim);
-        }
-
-        /* Forms */
-        .form-group {
-            margin-bottom: 1.25rem;
-        }
-
-        .form-group label {
-            display: block;
-            color: var(--text-dim);
-            font-size: 0.85rem;
-            margin-bottom: 0.5rem;
-        }
-
-        .form-group input,
-        .form-group select,
-        .form-group textarea {
-            width: 100%;
-            background: var(--bg);
-            border: 1px solid var(--border);
-            color: var(--text);
-            padding: 0.75rem;
-            font-family: var(--font-mono);
-            font-size: 0.9rem;
-        }
-
-        .form-group input:focus,
-        .form-group select:focus,
-        .form-group textarea:focus {
-            outline: none;
-            border-color: var(--accent);
-        }
-
-        .form-group textarea {
-            min-height: 100px;
-            resize: vertical;
-        }
-
-        .form-help {
-            color: var(--text-muted);
-            font-size: 0.75rem;
-            margin-top: 0.25rem;
-        }
-
-        /* Radio group */
-        .radio-group {
-            display: flex;
-            gap: 1.5rem;
-        }
-
-        .radio-option {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            cursor: pointer;
-        }
-
-        .radio-option input[type="radio"] {
-            width: auto;
-            margin: 0;
-        }
-
-        /* Resolved banner */
-        .resolved-banner {
-            padding: 1rem 1.5rem;
-            text-align: center;
-            font-weight: 700;
-            margin-bottom: 1.5rem;
-        }
-
-        .resolved-banner.yes {
-            background: var(--yes);
-            color: #000;
-        }
-
-        .resolved-banner.no {
-            background: var(--no);
-            color: #fff;
-        }
-
-        /* Meta info */
-        .meta {
-            color: var(--text-muted);
-            font-size: 0.8rem;
-        }
-
-        .meta-row {
-            display: flex;
-            justify-content: space-between;
-            padding: 0.5rem 0;
-            border-bottom: 1px solid var(--border);
-        }
-
-        .meta-row:last-child {
-            border-bottom: none;
-        }
-
-        .meta-value {
-            color: var(--text-dim);
-            text-align: right;
-            word-break: break-all;
-        }
-
-        /* Warning box */
-        .warning {
-            background: rgba(240, 180, 41, 0.1);
-            border: 1px solid var(--warning);
-            border-left: 3px solid var(--warning);
-            padding: 1rem;
-            color: var(--warning);
-            font-size: 0.85rem;
-            margin: 1rem 0;
-        }
-
-        /* Links */
-        a {
-            color: var(--link);
-        }
-
-        a:hover {
-            text-decoration: underline;
-        }
-
-        /* Code */
-        code {
-            background: var(--bg);
-            padding: 0.15rem 0.4rem;
-            font-size: 0.85rem;
-            border: 1px solid var(--border);
-        }
-
-        pre {
-            background: var(--bg);
-            padding: 1rem;
-            overflow-x: auto;
-            font-size: 0.8rem;
-            border: 1px solid var(--border);
-        }
-
-        /* Empty state */
-        .empty-state {
-            text-align: center;
-            padding: 3rem;
-            color: var(--text-muted);
-        }
-
-        /* XDR box */
-        .xdr-box {
-            background: var(--bg);
-            border: 1px solid var(--border);
-            padding: 1rem;
-            font-size: 0.7rem;
-            word-break: break-all;
-            max-height: 150px;
-            overflow-y: auto;
-            color: var(--text-dim);
-        }
-
-        /* Steps list */
-        .steps {
-            counter-reset: step;
-            list-style: none;
-            padding: 0;
-            margin: 0;
-        }
-
-        .steps li {
-            counter-increment: step;
-            padding: 0.75rem 0 0.75rem 2.5rem;
-            position: relative;
-            border-bottom: 1px solid var(--border);
-        }
-
-        .steps li:last-child {
-            border-bottom: none;
-        }
-
-        .steps li::before {
-            content: counter(step);
-            position: absolute;
-            left: 0;
-            width: 1.5rem;
-            height: 1.5rem;
-            background: var(--accent);
-            color: var(--bg);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 0.8rem;
-            font-weight: 700;
-        }
-
-        /* Footer */
-        .footer {
-            border-top: 1px solid var(--border);
-            margin-top: 3rem;
-            padding-top: 1.5rem;
-            color: var(--text-muted);
-            font-size: 0.75rem;
-        }
-
-        .footer-links {
-            display: flex;
-            gap: 1.5rem;
-            margin-bottom: 0.5rem;
-        }
-
-        .footer-links a {
-            color: var(--text-dim);
-            text-decoration: none;
-        }
-
-        .footer-links a:hover {
-            color: var(--accent);
-        }
-
-        /* Back link */
-        .back-link {
-            display: inline-block;
-            color: var(--text-dim);
-            text-decoration: none;
-            margin-bottom: 1.5rem;
-            font-size: 0.9rem;
-        }
-
-        .back-link:hover {
-            color: var(--accent);
-        }
-
-        /* Error message */
-        .error-box {
-            background: rgba(239, 68, 68, 0.1);
-            border: 1px solid var(--no);
-            border-left: 3px solid var(--no);
-            padding: 1rem;
-            margin-bottom: 1.5rem;
-        }
-
-        .error-code {
-            color: var(--no);
-            font-weight: 700;
-            margin-bottom: 0.5rem;
-        }
-
-        .error-message {
-            color: var(--text);
-        }
-
-        /* Success indicator */
-        .success-indicator {
-            color: var(--yes);
-            font-weight: 700;
-        }
-
-        /* Utility classes */
-        .text-yes { color: var(--yes); }
-        .text-no { color: var(--no); }
-        .text-muted { color: var(--text-muted); }
-        .text-dim { color: var(--text-dim); }
-        .text-accent { color: var(--accent); }
-        .font-bold { font-weight: 700; }
-        .mb-0 { margin-bottom: 0; }
-        .mb-1 { margin-bottom: 0.5rem; }
-        .mb-2 { margin-bottom: 1rem; }
-        .mb-3 { margin-bottom: 1.5rem; }
-        .mt-2 { margin-top: 1rem; }
-        .mt-3 { margin-top: 1.5rem; }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <header class="header">
-            <h1 class="header-title"><a href="/">TOTAL</a></h1>
-            <nav class="nav">
-                <a href="/" {{if eq .ActiveNav "markets"}}class="active"{{end}}>Markets</a>
-                <a href="/oracle" {{if eq .ActiveNav "oracle"}}class="active"{{end}}>Oracle Admin</a>
-            </nav>
-        </header>
-
-        <main class="main">
-            {{template "content" .}}
-        </main>
-
-        <footer class="footer">
-            <div class="footer-links">
-                <a href="https://stellar.org" target="_blank">Stellar</a>
-                <a href="https://soroban.stellar.org" target="_blank">Soroban</a>
-                <a href="https://lab.stellar.org" target="_blank">Stellar Lab</a>
-            </div>
-            <p>Prediction markets powered by LMSR on Stellar/Soroban</p>
-        </footer>
+            --bg: #f0f8ff;
+            --bg-panel: #ffffff;
+            --bg-card: #f8fcff;
+            --border: #c8dce8;
+            --text: #0a1628;
+            --text-dim: #2d4a5e;
+            --text-muted: #5a8fa8;
+            --accent: #0077b6;
+            --accent-dim: #005f92;
+            --yes: #059669;
+            --no: #dc2626;
+            --link: #0077b6;
+            --scanline-opacity: 0;
+        }
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+    html { font-size: 16px; height: 100%; }
+    body {
+        font-family: var(--font-mono);
+        background: var(--bg);
+        color: var(--text);
+        margin: 0;
+        padding: 0;
+        line-height: 1.6;
+        min-height: 100%;
+        display: flex;
+        flex-direction: column;
+    }
+    body::before {
+        content: "";
+        position: fixed;
+        top: 0; left: 0;
+        width: 100%; height: 100%;
+        pointer-events: none;
+        background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0, 212, 255, var(--scanline-opacity)) 2px, rgba(0, 212, 255, var(--scanline-opacity)) 4px);
+        z-index: 9999;
+    }
+    .container { max-width: 1400px; margin: 0 auto; padding: 2rem; flex: 1; display: flex; flex-direction: column; width: 100%; }
+    .header { border-bottom: 1px solid var(--border); margin-bottom: 2rem; padding-bottom: 1rem; }
+    .header-title { font-size: 1.5rem; font-weight: 700; color: var(--accent); margin: 0 0 1rem 0; letter-spacing: 0.1em; text-transform: uppercase; }
+    .header-title a { color: inherit; text-decoration: none; }
+    .nav { display: flex; gap: 2rem; }
+    .nav a { color: var(--text-dim); text-decoration: none; font-size: 0.9rem; padding: 0.25rem 0; border-bottom: 2px solid transparent; transition: color 0.15s, border-color 0.15s; text-transform: uppercase; letter-spacing: 0.05em; }
+    .nav a:hover { color: var(--accent); }
+    .nav a.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .main { flex: 1; }
+    .panel { background: var(--bg-panel); border: 1px solid var(--border); border-left: 3px solid var(--accent); padding: 1.5rem; margin-bottom: 1.5rem; }
+    .panel-title { color: var(--text-muted); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.1em; margin: 0 0 1rem 0; }
+    .card { background: var(--bg-card); border: 1px solid var(--border); padding: 1.25rem; margin-bottom: 1rem; transition: border-color 0.15s, box-shadow 0.15s; }
+    .card:hover { border-color: var(--accent); box-shadow: 0 0 20px rgba(0, 212, 255, 0.1); }
+    .card-title { font-size: 1rem; margin: 0 0 0.75rem 0; color: var(--text); }
+    .card-title a { color: inherit; text-decoration: none; }
+    .card-title a:hover { color: var(--accent); }
+    .prices { display: flex; gap: 2rem; margin-bottom: 0.75rem; }
+    .price { display: flex; align-items: baseline; gap: 0.5rem; }
+    .price-label { color: var(--text-muted); font-size: 0.85rem; text-transform: uppercase; }
+    .price-value { font-weight: 700; font-size: 1.1rem; }
+    .price-yes { color: var(--yes); }
+    .price-no { color: var(--no); }
+    .price-lg { font-size: 2rem; }
+    .btn { display: inline-block; background: transparent; border: 1px solid var(--accent); color: var(--accent); padding: 0.75rem 1.5rem; font-family: var(--font-mono); font-size: 0.9rem; cursor: pointer; text-decoration: none; transition: all 0.15s; text-transform: uppercase; letter-spacing: 0.05em; }
+    .btn:hover { background: var(--accent); color: var(--bg); box-shadow: 0 0 15px rgba(0, 212, 255, 0.3); }
+    .btn-yes { border-color: var(--yes); color: var(--yes); }
+    .btn-yes:hover { background: var(--yes); color: #000; box-shadow: 0 0 15px rgba(0, 255, 159, 0.3); }
+    .btn-no { border-color: var(--no); color: var(--no); }
+    .btn-no:hover { background: var(--no); color: #fff; box-shadow: 0 0 15px rgba(255, 71, 87, 0.3); }
+    .btn-primary { background: var(--accent); color: var(--bg); }
+    .btn-primary:hover { background: var(--accent-dim); }
+    .form-group { margin-bottom: 1.25rem; }
+    .form-group label { display: block; color: var(--text-dim); font-size: 0.85rem; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.05em; }
+    .form-group input, .form-group select, .form-group textarea { width: 100%; background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 0.75rem; font-family: var(--font-mono); font-size: 0.9rem; }
+    .form-group input:focus, .form-group select:focus, .form-group textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 10px rgba(0, 212, 255, 0.2); }
+    .form-group textarea { min-height: 100px; resize: vertical; }
+    .form-help { color: var(--text-muted); font-size: 0.75rem; margin-top: 0.25rem; }
+    .radio-group { display: flex; gap: 1.5rem; }
+    .radio-option { display: flex; align-items: center; gap: 0.5rem; cursor: pointer; }
+    .radio-option input[type="radio"] { width: auto; margin: 0; accent-color: var(--accent); }
+    .resolved-banner { padding: 1rem 1.5rem; text-align: center; font-weight: 700; margin-bottom: 1.5rem; text-transform: uppercase; letter-spacing: 0.1em; }
+    .resolved-banner.yes { background: var(--yes); color: #000; }
+    .resolved-banner.no { background: var(--no); color: #fff; }
+    .meta { color: var(--text-muted); font-size: 0.8rem; }
+    .meta-row { display: flex; justify-content: space-between; padding: 0.5rem 0; border-bottom: 1px solid var(--border); }
+    .meta-row:last-child { border-bottom: none; }
+    .meta-value { color: var(--text-dim); text-align: right; word-break: break-all; }
+    .warning { background: rgba(255, 183, 77, 0.1); border: 1px solid var(--warning); border-left: 3px solid var(--warning); padding: 1rem; color: var(--warning); font-size: 0.85rem; margin: 1rem 0; }
+    a { color: var(--link); }
+    a:hover { text-decoration: underline; }
+    code { background: var(--bg); padding: 0.15rem 0.4rem; font-size: 0.85rem; border: 1px solid var(--border); color: var(--accent); }
+    pre { background: var(--bg); padding: 1rem; overflow-x: auto; font-size: 0.8rem; border: 1px solid var(--border); }
+    .empty-state { text-align: center; padding: 3rem; color: var(--text-muted); }
+    .xdr-box { background: var(--bg); border: 1px solid var(--border); padding: 1rem; font-size: 0.7rem; word-break: break-all; max-height: 150px; overflow-y: auto; color: var(--text-dim); }
+    .steps { counter-reset: step; list-style: none; padding: 0; margin: 0; }
+    .steps li { counter-increment: step; padding: 0.75rem 0 0.75rem 2.5rem; position: relative; border-bottom: 1px solid var(--border); }
+    .steps li:last-child { border-bottom: none; }
+    .steps li::before { content: counter(step); position: absolute; left: 0; width: 1.5rem; height: 1.5rem; background: var(--accent); color: var(--bg); display: flex; align-items: center; justify-content: center; font-size: 0.8rem; font-weight: 700; }
+    .footer { border-top: 1px solid var(--border); margin-top: auto; padding: 2rem 0; }
+    .footer-inner { max-width: 1400px; margin: 0 auto; padding: 0 2rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; }
+    .footer-links { display: flex; gap: 1.5rem; }
+    .footer-links a { color: var(--text-dim); text-decoration: none; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; }
+    .footer-links a:hover { color: var(--accent); }
+    .footer-center { color: var(--text-muted); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; }
+    .footer-center a { color: var(--accent); }
+    .footer-right { color: var(--text-muted); font-size: 0.75rem; }
+    .back-link { display: inline-block; color: var(--text-dim); text-decoration: none; margin-bottom: 1.5rem; font-size: 0.9rem; }
+    .back-link:hover { color: var(--accent); }
+    .error-box { background: rgba(255, 71, 87, 0.1); border: 1px solid var(--no); border-left: 3px solid var(--no); padding: 1rem; margin-bottom: 1.5rem; }
+    .error-code { color: var(--no); font-weight: 700; margin-bottom: 0.5rem; }
+    .error-message { color: var(--text); }
+    .success-indicator { color: var(--yes); font-weight: 700; }
+    .text-yes { color: var(--yes); }
+    .text-no { color: var(--no); }
+    .text-muted { color: var(--text-muted); }
+    .text-dim { color: var(--text-dim); }
+    .text-accent { color: var(--accent); }
+    .font-bold { font-weight: 700; }
+    .mb-0 { margin-bottom: 0; }
+    .mb-1 { margin-bottom: 0.5rem; }
+    .mb-2 { margin-bottom: 1rem; }
+    .mb-3 { margin-bottom: 1.5rem; }
+    .mt-2 { margin-top: 1rem; }
+    .mt-3 { margin-top: 1.5rem; }
+</style>
+{{end}}
+
+{{define "header"}}
+<header class="header">
+    <h1 class="header-title"><a href="/">TOTAL</a></h1>
+    <nav class="nav">
+        <a href="/" {{if eq .ActiveNav "markets"}}class="active"{{end}}>Markets</a>
+        <a href="/oracle" {{if eq .ActiveNav "oracle"}}class="active"{{end}}>Oracle Admin</a>
+    </nav>
+</header>
+{{end}}
+
+{{define "footer"}}
+<footer class="footer">
+    <div class="footer-inner">
+        <div class="footer-links">
+            <a href="https://stellar.org" target="_blank">Stellar</a>
+            <a href="https://soroban.stellar.org" target="_blank">Soroban</a>
+            <a href="https://lab.stellar.org" target="_blank">Stellar Lab</a>
+        </div>
+        <div class="footer-center">
+            <a href="https://github.com/mtlprog/total" target="_blank">Commit to TOTAL on GitHub</a>
+        </div>
+        <div class="footer-right">
+            LMSR Prediction Markets
+        </div>
     </div>
-</body>
-</html>
+</footer>
 {{end}}
