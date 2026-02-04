@@ -22,12 +22,13 @@ import (
 
 // MarketHandler handles HTTP requests for prediction markets.
 type MarketHandler struct {
-	marketService   *service.MarketService
-	factoryService  *service.FactoryService
-	ipfsClient      *ipfs.Client
-	tmpl            *template.Template
-	oraclePublicKey string
-	logger          *slog.Logger
+	marketService     *service.MarketService
+	factoryService    *service.FactoryService
+	ipfsClient        *ipfs.Client
+	tmpl              *template.Template
+	oraclePublicKey   string
+	networkPassphrase string
+	logger            *slog.Logger
 }
 
 // NewMarketHandler creates a new market handler.
@@ -37,15 +38,17 @@ func NewMarketHandler(
 	ipfsClient *ipfs.Client,
 	tmpl *template.Template,
 	oraclePublicKey string,
+	networkPassphrase string,
 	logger *slog.Logger,
 ) *MarketHandler {
 	return &MarketHandler{
-		marketService:   marketService,
-		factoryService:  factoryService,
-		ipfsClient:      ipfsClient,
-		tmpl:            tmpl,
-		oraclePublicKey: oraclePublicKey,
-		logger:          logger,
+		marketService:     marketService,
+		factoryService:    factoryService,
+		ipfsClient:        ipfsClient,
+		tmpl:              tmpl,
+		oraclePublicKey:   oraclePublicKey,
+		networkPassphrase: networkPassphrase,
+		logger:            logger,
 	}
 }
 
@@ -60,9 +63,18 @@ func (h *MarketHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /market/{id}/resolve", h.handleResolveMarket)
 	mux.HandleFunc("POST /market/{id}/claim", h.handleBuildClaimTx)
 	mux.HandleFunc("POST /market/{id}/withdraw", h.handleBuildWithdrawTx)
-	mux.HandleFunc("GET /deploy", h.handleDeployForm)
+	mux.HandleFunc("GET /oracle", h.handleOracleAdmin)
+	mux.HandleFunc("GET /deploy", h.handleRedirectToOracle)
 	mux.HandleFunc("POST /deploy", h.handleBuildDeployTx)
 	mux.HandleFunc("GET /health", h.handleHealth)
+}
+
+// networkName returns "testnet" or "public" based on the network passphrase.
+func (h *MarketHandler) networkName() string {
+	if strings.Contains(h.networkPassphrase, "Test") {
+		return "testnet"
+	}
+	return "public"
 }
 
 // MarketView represents a market for display in templates.
@@ -100,6 +112,8 @@ func (h *MarketHandler) handleListMarkets(w http.ResponseWriter, r *http.Request
 			"Markets":         []MarketView{},
 			"OraclePublicKey": h.oraclePublicKey,
 			"Error":           "Factory contract not configured",
+			"ActiveNav":       "markets",
+			"Network":         h.networkName(),
 		}
 		if err := h.tmpl.Render(w, "markets", data); err != nil {
 			h.logger.Error("failed to render template", "error", err)
@@ -116,6 +130,8 @@ func (h *MarketHandler) handleListMarkets(w http.ResponseWriter, r *http.Request
 			"Markets":         []MarketView{},
 			"OraclePublicKey": h.oraclePublicKey,
 			"Error":           "Failed to fetch markets from factory",
+			"ActiveNav":       "markets",
+			"Network":         h.networkName(),
 		}
 		if err := h.tmpl.Render(w, "markets", data); err != nil {
 			h.logger.Error("failed to render template", "error", err)
@@ -136,6 +152,8 @@ func (h *MarketHandler) handleListMarkets(w http.ResponseWriter, r *http.Request
 	data := map[string]any{
 		"Markets":         markets,
 		"OraclePublicKey": h.oraclePublicKey,
+		"ActiveNav":       "markets",
+		"Network":         h.networkName(),
 	}
 
 	if err := h.tmpl.Render(w, "markets", data); err != nil {
@@ -252,6 +270,8 @@ func (h *MarketHandler) handleMarketDetail(w http.ResponseWriter, r *http.Reques
 		"OraclePublicKey": h.oraclePublicKey,
 		"BarChart":        "", // TODO: add bar chart
 		"PriceChart":      "", // TODO: add price history chart
+		"ActiveNav":       "markets",
+		"Network":         h.networkName(),
 	}
 
 	if err := h.tmpl.Render(w, "market", data); err != nil {
@@ -293,6 +313,8 @@ func (h *MarketHandler) handleGetQuote(w http.ResponseWriter, r *http.Request) {
 	data := map[string]any{
 		"Quote":      quote,
 		"ContractID": contractID,
+		"ActiveNav":  "markets",
+		"Network":    h.networkName(),
 	}
 
 	if err := h.tmpl.Render(w, "quote", data); err != nil {
@@ -365,8 +387,10 @@ func (h *MarketHandler) handleBuildBuyTx(w http.ResponseWriter, r *http.Request)
 
 	// Render XDR result page
 	data := map[string]any{
-		"Result":     result,
-		"ContractID": contractID,
+		"Result":    result,
+		"MarketID":  contractID,
+		"ActiveNav": "markets",
+		"Network":   h.networkName(),
 	}
 
 	if err := h.tmpl.Render(w, "transaction", data); err != nil {
@@ -439,8 +463,10 @@ func (h *MarketHandler) handleBuildSellTx(w http.ResponseWriter, r *http.Request
 
 	// Render XDR result page
 	data := map[string]any{
-		"Result":     result,
-		"ContractID": contractID,
+		"Result":    result,
+		"MarketID":  contractID,
+		"ActiveNav": "markets",
+		"Network":   h.networkName(),
 	}
 
 	if err := h.tmpl.Render(w, "transaction", data); err != nil {
@@ -478,8 +504,10 @@ func (h *MarketHandler) handleResolveMarket(w http.ResponseWriter, r *http.Reque
 	}
 
 	data := map[string]any{
-		"Result":     result,
-		"ContractID": contractID,
+		"Result":    result,
+		"MarketID":  contractID,
+		"ActiveNav": "oracle",
+		"Network":   h.networkName(),
 	}
 
 	if err := h.tmpl.Render(w, "transaction", data); err != nil {
@@ -516,8 +544,10 @@ func (h *MarketHandler) handleBuildClaimTx(w http.ResponseWriter, r *http.Reques
 	}
 
 	data := map[string]any{
-		"Result":     result,
-		"ContractID": contractID,
+		"Result":    result,
+		"MarketID":  contractID,
+		"ActiveNav": "markets",
+		"Network":   h.networkName(),
 	}
 
 	if err := h.tmpl.Render(w, "transaction", data); err != nil {
@@ -554,8 +584,10 @@ func (h *MarketHandler) handleBuildWithdrawTx(w http.ResponseWriter, r *http.Req
 	}
 
 	data := map[string]any{
-		"Result":     result,
-		"ContractID": contractID,
+		"Result":    result,
+		"MarketID":  contractID,
+		"ActiveNav": "oracle",
+		"Network":   h.networkName(),
 	}
 
 	if err := h.tmpl.Render(w, "transaction", data); err != nil {
@@ -564,20 +596,45 @@ func (h *MarketHandler) handleBuildWithdrawTx(w http.ResponseWriter, r *http.Req
 	}
 }
 
-// handleDeployForm renders the deploy market form.
-func (h *MarketHandler) handleDeployForm(w http.ResponseWriter, r *http.Request) {
-	if h.factoryService == nil || !h.factoryService.HasFactory() {
-		http.Error(w, "Factory contract not configured", http.StatusServiceUnavailable)
-		return
+// handleRedirectToOracle redirects /deploy to /oracle.
+func (h *MarketHandler) handleRedirectToOracle(w http.ResponseWriter, r *http.Request) {
+	http.Redirect(w, r, "/oracle", http.StatusMovedPermanently)
+}
+
+// handleOracleAdmin renders the oracle admin page with deploy/resolve/withdraw forms.
+func (h *MarketHandler) handleOracleAdmin(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	var markets []MarketView
+	var factoryContract string
+
+	if h.factoryService != nil && h.factoryService.HasFactory() {
+		factoryContract = h.factoryService.FactoryContractID()
+
+		// Get all markets for the dropdowns
+		contractIDs, err := h.factoryService.ListMarkets(ctx)
+		if err != nil {
+			h.logger.Warn("failed to list markets for oracle admin", "error", err)
+		} else {
+			states, err := h.factoryService.GetMarketStates(ctx, contractIDs)
+			if err != nil {
+				h.logger.Warn("failed to get market states for oracle admin", "error", err)
+			} else {
+				markets = h.buildMarketViews(ctx, states)
+			}
+		}
 	}
 
 	data := map[string]any{
 		"OraclePublicKey":       h.oraclePublicKey,
 		"DefaultLiquidityParam": 100.0,
-		"FactoryContract":       h.factoryService.FactoryContractID(),
+		"FactoryContract":       factoryContract,
+		"Markets":               markets,
+		"ActiveNav":             "oracle",
+		"Network":               h.networkName(),
 	}
 
-	if err := h.tmpl.Render(w, "deploy", data); err != nil {
+	if err := h.tmpl.Render(w, "oracle", data); err != nil {
 		h.logger.Error("failed to render template", "error", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 	}
@@ -629,8 +686,10 @@ func (h *MarketHandler) handleBuildDeployTx(w http.ResponseWriter, r *http.Reque
 	}
 
 	data := map[string]any{
-		"Result":     result,
-		"ContractID": "new",
+		"Result":    result,
+		"MarketID":  "new",
+		"ActiveNav": "oracle",
+		"Network":   h.networkName(),
 	}
 
 	if err := h.tmpl.Render(w, "transaction", data); err != nil {

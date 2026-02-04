@@ -1,138 +1,52 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Price Quote - Total</title>
-    <style>
-        :root {
-            --bg: #0a0a0a;
-            --card: #141414;
-            --border: #2a2a2a;
-            --text: #e0e0e0;
-            --text-muted: #888;
-            --accent: #3b82f6;
-            --yes: #22c55e;
-            --no: #ef4444;
-        }
-        body {
-            font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', monospace;
-            background: var(--bg);
-            color: var(--text);
-            max-width: 600px;
-            margin: 0 auto;
-            padding: 2rem;
-            line-height: 1.6;
-        }
-        h1 {
-            color: var(--text);
-            margin-bottom: 0.5rem;
-        }
-        .nav {
-            margin-bottom: 2rem;
-        }
-        .nav a {
-            color: var(--accent);
-            text-decoration: none;
-        }
-        .section {
-            background: var(--card);
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            padding: 1.5rem;
-            margin-bottom: 1.5rem;
-        }
-        .section-title {
-            color: var(--text-muted);
-            font-size: 0.85rem;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            margin-bottom: 1rem;
-        }
-        .quote-row {
-            display: flex;
-            justify-content: space-between;
-            padding: 0.75rem 0;
-            border-bottom: 1px solid var(--border);
-        }
-        .quote-row:last-child {
-            border-bottom: none;
-        }
-        .quote-label {
-            color: var(--text-muted);
-        }
-        .quote-value {
-            font-weight: bold;
-        }
-        .outcome-yes {
-            color: var(--yes);
-        }
-        .outcome-no {
-            color: var(--no);
-        }
-        .cost {
-            font-size: 1.5rem;
-            color: var(--accent);
-        }
-        .btn {
-            display: inline-block;
-            padding: 0.75rem 1.5rem;
-            background: var(--accent);
-            color: white;
-            text-decoration: none;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-family: inherit;
-            font-size: 1rem;
-        }
-        .btn:hover {
-            opacity: 0.9;
-        }
-    </style>
-</head>
-<body>
-    <nav class="nav">
-        <a href="/market/{{.MarketID}}">← Back to Market</a>
-    </nav>
+{{define "title"}}Price Quote - Total{{end}}
+{{define "description"}}Price quote for prediction market trade{{end}}
+{{define "og_title"}}Price Quote - Total{{end}}
+{{define "og_description"}}Price quote for prediction market trade{{end}}
 
-    <h1>Price Quote</h1>
+{{define "content"}}
+<a href="/market/{{.ContractID}}" class="back-link">← Back to Market</a>
 
-    <div class="section">
-        <div class="section-title">Quote Details</div>
+<h1 style="margin: 0 0 1.5rem 0; font-size: 1.25rem;">Price Quote</h1>
 
-        <div class="quote-row">
-            <span class="quote-label">Outcome</span>
-            <span class="quote-value {{if eq .Quote.Outcome "YES"}}outcome-yes{{else}}outcome-no{{end}}">
+<div class="panel">
+    <h3 class="panel-title">Quote Details</h3>
+    <div class="meta">
+        <div class="meta-row">
+            <span>Outcome</span>
+            <span class="meta-value {{if eq .Quote.Outcome "YES"}}text-yes{{else}}text-no{{end}} font-bold">
                 {{.Quote.Outcome}}
             </span>
         </div>
 
-        <div class="quote-row">
-            <span class="quote-label">Token Amount</span>
-            <span class="quote-value">{{printf "%.4f" .Quote.ShareAmount}}</span>
+        <div class="meta-row">
+            <span>Token Amount</span>
+            <span class="meta-value">{{printf "%.4f" .Quote.ShareAmount}}</span>
         </div>
 
-        <div class="quote-row">
-            <span class="quote-label">Price per Token</span>
-            <span class="quote-value">{{printf "%.4f" .Quote.PricePerShare}} EURMTL</span>
+        <div class="meta-row">
+            <span>Price per Token</span>
+            <span class="meta-value">{{printf "%.4f" .Quote.PricePerShare}}</span>
         </div>
 
-        <div class="quote-row">
-            <span class="quote-label">Total Cost</span>
-            <span class="quote-value cost">{{printf "%.4f" .Quote.Cost}} EURMTL</span>
+        <div class="meta-row">
+            <span>Total Cost</span>
+            <span class="meta-value text-accent font-bold" style="font-size: 1.1rem;">{{printf "%.4f" .Quote.Cost}}</span>
         </div>
 
-        <div class="quote-row">
-            <span class="quote-label">New Probability</span>
-            <span class="quote-value">{{printf "%.1f" (mul .Quote.NewProbability 100)}}%</span>
+        <div class="meta-row">
+            <span>New Probability</span>
+            <span class="meta-value">{{printf "%.1f" (mul .Quote.NewProbability 100)}}%</span>
         </div>
     </div>
+</div>
 
-    <p style="color: var(--text-muted); font-size: 0.9rem;">
-        This is an estimate. Actual cost may vary slightly if market state changes before your transaction is processed.
-    </p>
+<p class="text-muted" style="font-size: 0.85rem;">
+    This is an estimate. Actual cost may vary slightly if market state changes before your transaction is processed.
+</p>
 
-    <a href="/market/{{.MarketID}}" class="btn">Go Back to Buy</a>
-</body>
-</html>
+<div style="margin-top: 1.5rem;">
+    <a href="/market/{{.ContractID}}" class="btn">Go Back to Buy</a>
+</div>
+{{end}}
+
+{{template "base" .}}

@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"html/template"
 	"io"
+	"net/url"
+	"strings"
 )
 
 //go:embed templates/*.html
@@ -30,6 +32,26 @@ var funcMap = template.FuncMap{
 	},
 	"sub": func(a, b float64) float64 {
 		return a - b
+	},
+	"urlencode": url.QueryEscape,
+	"labURL": func(xdr, network string) string {
+		return fmt.Sprintf("https://lab.stellar.org/?xdr=%s&network=%s",
+			url.QueryEscape(xdr), network)
+	},
+	"truncate": func(s string, n int) string {
+		if len(s) <= n {
+			return s
+		}
+		return s[:n] + "..."
+	},
+	"isTestnet": func(passphrase string) bool {
+		return strings.Contains(passphrase, "Test")
+	},
+	"networkName": func(passphrase string) string {
+		if strings.Contains(passphrase, "Test") {
+			return "testnet"
+		}
+		return "public"
 	},
 }
 
