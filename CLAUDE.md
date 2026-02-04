@@ -15,6 +15,10 @@ Stellar prediction market platform. Stateless web application that builds Soroba
 - `cd contracts && cargo test` - Run Soroban contract tests
 - `cd contracts && cargo build --release --target wasm32-unknown-unknown` - Build Soroban WASM
 - `rustup default stable` - Required before cargo commands on fresh Rust install
+- `rustup target add wasm32-unknown-unknown` - Required before building WASM contracts
+- `cargo install --locked stellar-cli` - Install Stellar CLI (v25+, no --features opt)
+- `stellar keys generate oracle --network testnet --fund` - Generate funded testnet keypair
+- `stellar contract id asset --network testnet --asset native` - Get native XLM SAC address
 
 ## Project Structure
 
@@ -108,13 +112,17 @@ contracts/
 - Use `#![no_std]` - standard library not available
 - All arithmetic must handle overflow (use checked_* methods)
 - Test with `soroban-sdk` testutils feature
-- Deploy with `soroban contract deploy` CLI
+- Deploy with `stellar contract deploy --wasm <path> --source <key> --network testnet`
 - Initialize SAC with `stellar contract asset deploy`
 - In tests, `#[should_panic(expected = "...")]` must use error codes like `"Error(Contract, #7)"`, not error names
 - Avoid `.unwrap()` on storage access - use `.ok_or(MarketError::StorageCorrupted)?` for proper error handling
 - Always guard pool subtraction: `if pool < amount { return Err(MarketError::InsufficientPool); }`
 - Document token_client.transfer() panics with comments (they can fail on insufficient balance)
 - Error codes: NotInitialized=#2, AlreadyResolved=#3, NotResolved=#4, InvalidOutcome=#5, InvalidAmount=#6, InsufficientBalance=#7, SlippageExceeded=#8, ReturnTooLow=#9, Unauthorized=#10, InvalidLiquidity=#11, Overflow=#12, NothingToClaim=#13, StorageCorrupted=#14, InsufficientPool=#15
+- Initial funding must exceed `b * ln(2)` slightly (use 700000000 for b=1000000000, not 693147180)
+- Collateral token is configurable - can use XLM (native), EURMTL, USDC, or any SAC
+- Native XLM SAC on testnet: `CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC`
+- See `contracts/README.md` for full deployment guide with verified CLI examples
 
 ### Refactoring Patterns
 - When moving types between packages (e.g., model → service), update tests that reference them
