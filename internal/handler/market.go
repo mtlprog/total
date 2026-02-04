@@ -90,8 +90,6 @@ type MarketView struct {
 	Resolution     string
 	LiquidityParam float64
 	MetadataHash   string
-	YesAsset       string
-	NoAsset        string
 	MetadataError  string // Non-empty when IPFS metadata failed to load
 }
 
@@ -180,8 +178,6 @@ func (h *MarketHandler) buildMarketViews(ctx context.Context, states []service.M
 				NoSold:       float64(s.NoSold) / float64(soroban.ScaleFactor),
 				IsResolved:   s.Resolved,
 				MetadataHash: s.MetadataHash,
-				YesAsset:     "YES",
-				NoAsset:      "NO",
 			}
 
 			// Fetch metadata from IPFS
@@ -242,8 +238,6 @@ func (h *MarketHandler) handleMarketDetail(w http.ResponseWriter, r *http.Reques
 		NoSold:   float64(state.NoSold) / float64(soroban.ScaleFactor),
 		PriceYes: state.PriceYes,
 		PriceNo:  state.PriceNo,
-		YesAsset: "YES",
-		NoAsset:  "NO",
 	}
 
 	if state.Resolved {
@@ -259,6 +253,10 @@ func (h *MarketHandler) handleMarketDetail(w http.ResponseWriter, r *http.Reques
 		} else {
 			market.Question = metadata.Question
 			market.Description = metadata.Description
+			market.ResolutionSource = metadata.ResolutionSource
+			market.Category = metadata.Category
+			market.EndDate = metadata.EndDate
+			market.CreatedAt = metadata.CreatedAt
 		}
 		market.MetadataHash = state.MetadataHash
 	} else {
@@ -836,5 +834,15 @@ func (h *MarketHandler) writeError(w http.ResponseWriter, err error, logContext 
 	resp := mapError(err)
 	logArgs := append([]any{"error", err, "status", resp.Status}, logContext...)
 	h.logger.Error("request failed", logArgs...)
-	http.Error(w, resp.Message, resp.Status)
+
+	w.WriteHeader(resp.Status)
+	data := map[string]any{
+		"ErrorCode":    resp.Status,
+		"ErrorMessage": resp.Message,
+		"ActiveNav":    "",
+	}
+	if tmplErr := h.tmpl.Render(w, "error", data); tmplErr != nil {
+		h.logger.Error("failed to render error template", "error", tmplErr)
+		http.Error(w, resp.Message, resp.Status)
+	}
 }

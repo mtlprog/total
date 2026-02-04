@@ -130,22 +130,24 @@
 
             <div class="panel meta">
                 <h3 class="panel-title">Market Details</h3>
+                {{if not .Market.EndDate.IsZero}}
                 <div class="meta-row">
-                    <span>Market ID</span>
-                    <span class="meta-value">{{.Market.ID}}</span>
+                    <span>End Date</span>
+                    <span class="meta-value">{{.Market.EndDate.Format "2006-01-02 15:04 UTC"}}</span>
                 </div>
+                {{end}}
+                {{if .Market.Category}}
                 <div class="meta-row">
-                    <span>YES Token</span>
-                    <span class="meta-value">{{.Market.YesAsset}}</span>
+                    <span>Category</span>
+                    <span class="meta-value">{{.Market.Category}}</span>
                 </div>
+                {{end}}
+                {{if .Market.ResolutionSource}}
                 <div class="meta-row">
-                    <span>NO Token</span>
-                    <span class="meta-value">{{.Market.NoAsset}}</span>
+                    <span>Resolution Source</span>
+                    <span class="meta-value">{{.Market.ResolutionSource}}</span>
                 </div>
-                <div class="meta-row">
-                    <span>Liquidity (b)</span>
-                    <span class="meta-value">{{printf "%.0f" .Market.LiquidityParam}}</span>
-                </div>
+                {{end}}
                 <div class="meta-row">
                     <span>Volume YES</span>
                     <span class="meta-value">{{printf "%.2f" .Market.YesSold}} tokens</span>
@@ -153,6 +155,20 @@
                 <div class="meta-row">
                     <span>Volume NO</span>
                     <span class="meta-value">{{printf "%.2f" .Market.NoSold}} tokens</span>
+                </div>
+                <div class="meta-row">
+                    <span>Liquidity (b)</span>
+                    <span class="meta-value">{{printf "%.0f" .Market.LiquidityParam}}</span>
+                </div>
+                {{if not .Market.CreatedAt.IsZero}}
+                <div class="meta-row">
+                    <span>Created</span>
+                    <span class="meta-value">{{.Market.CreatedAt.Format "2006-01-02 15:04 UTC"}}</span>
+                </div>
+                {{end}}
+                <div class="meta-row">
+                    <span>Market ID</span>
+                    <span class="meta-value">{{.Market.ID}}</span>
                 </div>
                 {{if .Market.MetadataHash}}
                 <div class="meta-row">

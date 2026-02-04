@@ -72,6 +72,8 @@
     .panel-title { color: var(--text-muted); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.1em; margin: 0 0 1rem 0; }
     .card { background: var(--bg-card); border: 1px solid var(--border); padding: 1.25rem; margin-bottom: 1rem; transition: border-color 0.15s, box-shadow 0.15s; }
     .card:hover { border-color: var(--accent); box-shadow: 0 0 20px rgba(0, 212, 255, 0.1); }
+    .card-link { display: block; text-decoration: none; color: inherit; cursor: pointer; }
+    .card-link:hover { text-decoration: none; }
     .card-title { font-size: 1rem; margin: 0 0 0.75rem 0; color: var(--text); }
     .card-title a { color: inherit; text-decoration: none; }
     .card-title a:hover { color: var(--accent); }
@@ -112,6 +114,8 @@
     code { background: var(--bg); padding: 0.15rem 0.4rem; font-size: 0.85rem; border: 1px solid var(--border); color: var(--accent); }
     pre { background: var(--bg); padding: 1rem; overflow-x: auto; font-size: 0.8rem; border: 1px solid var(--border); }
     .empty-state { text-align: center; padding: 3rem; color: var(--text-muted); }
+    .section-title { font-size: 0.9rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.1em; margin: 2rem 0 1rem 0; }
+    .section-title:first-child { margin-top: 0; }
     .xdr-box { background: var(--bg); border: 1px solid var(--border); padding: 1rem; font-size: 0.7rem; word-break: break-all; max-height: 150px; overflow-y: auto; color: var(--text-dim); }
     .steps { counter-reset: step; list-style: none; padding: 0; margin: 0; }
     .steps li { counter-increment: step; padding: 0.75rem 0 0.75rem 2.5rem; position: relative; border-bottom: 1px solid var(--border); }
@@ -151,7 +155,6 @@
     <h1 class="header-title"><a href="/">TOTAL</a></h1>
     <nav class="nav">
         <a href="/" {{if eq .ActiveNav "markets"}}class="active"{{end}}>Markets</a>
-        <a href="/oracle" {{if eq .ActiveNav "oracle"}}class="active"{{end}}>Oracle Admin</a>
     </nav>
 </header>
 {{end}}

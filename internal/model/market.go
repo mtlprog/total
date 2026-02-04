@@ -88,21 +88,22 @@ func NewMarket(id string, liquidityParam float64) (*Market, error) {
 
 // Market represents a prediction market on Stellar.
 type Market struct {
-	ID              string     `json:"id"`               // Market contract ID (Soroban)
-	Question        string     `json:"question"`         // Main question
-	Description     string     `json:"description"`      // Detailed description
-	YesAsset        string     `json:"yes_asset"`        // YES token asset code
-	NoAsset         string     `json:"no_asset"`         // NO token asset code
-	CollateralAsset string     `json:"collateral_asset"` // e.g., "EURMTL:ISSUER"
-	LiquidityParam  float64    `json:"liquidity_param"`  // LMSR b parameter
-	YesSold         float64    `json:"yes_sold"`         // Tokens sold
-	NoSold          float64    `json:"no_sold"`          // Tokens sold
-	PriceYes        float64    `json:"price_yes"`        // Current YES price (0-1)
-	PriceNo         float64    `json:"price_no"`         // Current NO price (0-1)
-	ResolvedAt      *time.Time `json:"resolved_at"`      // Resolution timestamp
-	Resolution      Outcome    `json:"resolution"`       // OutcomeYes, OutcomeNo, or ""
-	CreatedAt       time.Time  `json:"created_at"`       // Creation timestamp
-	MetadataHash    string     `json:"metadata_hash"`    // IPFS hash
+	ID               string     `json:"id"`                // Market contract ID (Soroban)
+	Question         string     `json:"question"`          // Main question
+	Description      string     `json:"description"`       // Detailed description
+	ResolutionSource string     `json:"resolution_source"` // Source for resolution (from IPFS)
+	Category         string     `json:"category"`          // Market category (from IPFS)
+	EndDate          time.Time  `json:"end_date"`          // Market end date (from IPFS)
+	CollateralAsset  string     `json:"collateral_asset"`  // e.g., "EURMTL:ISSUER"
+	LiquidityParam   float64    `json:"liquidity_param"`   // LMSR b parameter
+	YesSold          float64    `json:"yes_sold"`          // Tokens sold
+	NoSold           float64    `json:"no_sold"`           // Tokens sold
+	PriceYes         float64    `json:"price_yes"`         // Current YES price (0-1)
+	PriceNo          float64    `json:"price_no"`          // Current NO price (0-1)
+	ResolvedAt       *time.Time `json:"resolved_at"`       // Resolution timestamp
+	Resolution       Outcome    `json:"resolution"`        // OutcomeYes, OutcomeNo, or ""
+	CreatedAt        time.Time  `json:"created_at"`        // Creation timestamp
+	MetadataHash     string     `json:"metadata_hash"`     // IPFS hash
 }
 
 // IsResolved returns true if the market has been resolved.

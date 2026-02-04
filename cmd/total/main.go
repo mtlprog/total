@@ -158,13 +158,48 @@ func runServe(c *cli.Context) error {
 		slog.Warn("factory contract not configured, market listing disabled")
 	}
 
-	// Initialize IPFS client (optional)
-	var ipfsClient *ipfs.Client
+	// Initialize IPFS client (always enabled for reading, Pinata keys optional for writing)
+	ipfsClient := ipfs.NewClient(pinataAPIKey, pinataAPISecret)
 	if pinataAPIKey != "" && pinataAPISecret != "" {
-		ipfsClient = ipfs.NewClient(pinataAPIKey, pinataAPISecret)
-		slog.Info("IPFS client enabled")
+		slog.Info("IPFS client enabled with Pinata (read+write)")
 	} else {
-		slog.Info("IPFS client disabled (no Pinata credentials)")
+		slog.Info("IPFS client enabled (read-only, no Pinata credentials)")
+	}
+
+	// Warmup IPFS cache with existing market metadata
+	if factoryService != nil {
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+			defer cancel()
+
+			markets, err := factoryService.ListMarkets(ctx)
+			if err != nil {
+				slog.Warn("failed to list markets for cache warmup", "error", err)
+				return
+			}
+
+			if len(markets) == 0 {
+				return
+			}
+
+			states, err := factoryService.GetMarketStates(ctx, markets)
+			if err != nil {
+				slog.Warn("failed to get market states for cache warmup", "error", err)
+				return
+			}
+
+			var hashes []string
+			for _, s := range states {
+				if s.MetadataHash != "" {
+					hashes = append(hashes, s.MetadataHash)
+				}
+			}
+
+			if len(hashes) > 0 {
+				slog.Info("warming up IPFS cache", "count", len(hashes))
+				ipfsClient.Warmup(hashes)
+			}
+		}()
 	}
 
 	// Initialize templates
