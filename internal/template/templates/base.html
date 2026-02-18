@@ -125,18 +125,38 @@
 
     /* ─── THEME TOGGLE ─── */
     .theme-toggle {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 30px;
+        height: 30px;
         background: none;
-        border: none;
+        border: 1px solid var(--border-mid);
         cursor: pointer;
-        font-family: var(--font);
-        font-size: 0.875rem;
         color: var(--text-2);
         padding: 0;
-        line-height: 1;
-        transition: color 0.15s;
+        flex-shrink: 0;
+        transition: color 0.15s, border-color 0.15s;
     }
 
-    .theme-toggle:hover { color: var(--text); }
+    .theme-toggle:hover { color: var(--text); border-color: var(--text-2); }
+
+    /* Sun visible in dark mode, moon in light mode */
+    .theme-icon-moon { display: none; }
+    .theme-icon-sun  { display: block; }
+
+    @media (prefers-color-scheme: light) {
+        .theme-icon-sun  { display: none; }
+        .theme-icon-moon { display: block; }
+    }
+
+    html[data-theme="dark"] .theme-icon-sun  { display: block; }
+    html[data-theme="dark"] .theme-icon-moon { display: none; }
+    html[data-theme="light"] .theme-icon-sun  { display: none; }
+    html[data-theme="light"] .theme-icon-moon { display: block; }
+
+    @keyframes sun-spin { to { transform: rotate(360deg); } }
+    .theme-toggle:hover .theme-icon-sun { animation: sun-spin 8s linear infinite; }
 
     /* ─── NETWORK BADGE ─── */
     .network-badge {
@@ -193,7 +213,8 @@
     }
 
     .market-card {
-        display: block;
+        display: flex;
+        flex-direction: column;
         background: var(--bg-surface);
         padding: 1.5rem;
         text-decoration: none;
@@ -238,6 +259,7 @@
         color: var(--text);
         margin-bottom: 1.25rem;
         padding-right: 1.5rem;
+        flex: 1; /* pushes prices/bar/meta to consistent bottom position */
     }
 
     .market-card-prices {
@@ -705,13 +727,19 @@
 <header class="header">
     <a href="/" class="header-brand">Total</a>
     <div class="header-right">
-        <a href="/oracle" class="header-link">Oracle</a>
+        <button class="theme-toggle" onclick="(function(){var h=document.documentElement,n=h.dataset.theme==='dark'?'light':'dark';h.dataset.theme=n;localStorage.setItem('theme',n)})()" aria-label="Toggle light/dark theme">
+            <svg class="theme-icon theme-icon-sun" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>
+            </svg>
+            <svg class="theme-icon theme-icon-moon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+            </svg>
+        </button>
         {{if .Network}}
         <span class="network-badge {{if eq .Network "testnet"}}testnet{{else}}mainnet{{end}}">
             {{if eq .Network "testnet"}}Testnet{{else}}Mainnet{{end}}
         </span>
         {{end}}
-        <button class="theme-toggle" onclick="(function(){var h=document.documentElement,n=h.dataset.theme==='dark'?'light':'dark';h.dataset.theme=n;localStorage.setItem('theme',n)})()" aria-label="Toggle light/dark theme">◑</button>
     </div>
 </header>
 {{end}}
