@@ -1,18 +1,63 @@
 {{define "styles"}}
+<script>
+(function(){var t=localStorage.getItem('theme')||(matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light');document.documentElement.dataset.theme=t})();
+</script>
 <style>
-    :root {
-        --bg: #090909;
-        --bg-surface: #111111;
-        --bg-card: #141414;
-        --border: #1e1e1e;
-        --border-mid: #2a2a2a;
-        --text: #ebebeb;
-        --text-2: #616161;
-        --text-3: #2d2d2d;
-        --yes: #00e676;
-        --no: #ff1744;
-        --warning: #ffa726;
+    /* ─── DARK THEME (poimandres) — default ─── */
+    :root,
+    html[data-theme="dark"] {
+        --bg: #1b1e28;
+        --bg-surface: #252937;
+        --bg-card: #2d3147;
+        --border: #2e3352;
+        --border-mid: #414868;
+        --text: #c8cde4;
+        --text-2: #6b7194;
+        --text-3: #414868;
+        --yes: #5de4c7;
+        --no: #f087bd;
+        --warning: #fffac2;
+        --yes-contrast: #1b1e28;
+        --no-contrast: #1b1e28;
         --font: 'Space Mono', 'SF Mono', 'Courier New', monospace;
+        --select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%236b7194'/%3E%3C/svg%3E");
+    }
+
+    /* ─── LIGHT THEME ─── */
+    @media (prefers-color-scheme: light) {
+        :root {
+            --bg: #f8f9ff;
+            --bg-surface: #f0f2fc;
+            --bg-card: #e6e9f7;
+            --border: #d0d4ee;
+            --border-mid: #b0b7d8;
+            --text: #1b1e28;
+            --text-2: #5a617a;
+            --text-3: #9399b5;
+            --yes: #009b76;
+            --no: #c24187;
+            --warning: #895200;
+            --yes-contrast: #f8f9ff;
+            --no-contrast: #f8f9ff;
+            --select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%235a617a'/%3E%3C/svg%3E");
+        }
+    }
+
+    html[data-theme="light"] {
+        --bg: #f8f9ff;
+        --bg-surface: #f0f2fc;
+        --bg-card: #e6e9f7;
+        --border: #d0d4ee;
+        --border-mid: #b0b7d8;
+        --text: #1b1e28;
+        --text-2: #5a617a;
+        --text-3: #9399b5;
+        --yes: #009b76;
+        --no: #c24187;
+        --warning: #895200;
+        --yes-contrast: #f8f9ff;
+        --no-contrast: #f8f9ff;
+        --select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%235a617a'/%3E%3C/svg%3E");
     }
 
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -64,7 +109,7 @@
     .header-right {
         display: flex;
         align-items: center;
-        gap: 2rem;
+        gap: 1.5rem;
     }
 
     .header-link {
@@ -77,6 +122,21 @@
     }
 
     .header-link:hover { color: var(--text); text-decoration: none; }
+
+    /* ─── THEME TOGGLE ─── */
+    .theme-toggle {
+        background: none;
+        border: none;
+        cursor: pointer;
+        font-family: var(--font);
+        font-size: 0.875rem;
+        color: var(--text-2);
+        padding: 0;
+        line-height: 1;
+        transition: color 0.15s;
+    }
+
+    .theme-toggle:hover { color: var(--text); }
 
     /* ─── NETWORK BADGE ─── */
     .network-badge {
@@ -126,21 +186,15 @@
     .market-grid {
         display: grid;
         gap: 1px;
-        background: var(--bg);
+        background: var(--border); /* 1px gap shows border color between cards */
         border: 1px solid var(--border);
-    }
-
-    @media (min-width: 720px) {
-        .market-grid { grid-template-columns: 1fr 1fr; }
-    }
-
-    @media (min-width: 1100px) {
-        .market-grid { grid-template-columns: 1fr 1fr 1fr; }
+        /* auto-fit collapses empty columns so a single card fills full width */
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
     }
 
     .market-card {
         display: block;
-        background: var(--bg);
+        background: var(--bg-surface);
         padding: 1.5rem;
         text-decoration: none;
         color: inherit;
@@ -213,11 +267,12 @@
     .market-price-value.no { color: var(--no); }
 
     .prob-bar {
-        height: 2px;
+        height: 5px;
         display: flex;
         overflow: hidden;
         background: var(--border-mid);
         margin-bottom: 0.75rem;
+        border-radius: 0;
     }
 
     .prob-bar-yes { background: var(--yes); height: 100%; }
@@ -301,8 +356,8 @@
         text-align: center;
     }
 
-    .resolved-banner.yes { background: var(--yes); color: #000; }
-    .resolved-banner.no { background: var(--no); color: #fff; }
+    .resolved-banner.yes { background: var(--yes); color: var(--yes-contrast); }
+    .resolved-banner.no { background: var(--no); color: var(--no-contrast); }
 
     /* ─── FORMS ─── */
     .form-group { margin-bottom: 1.25rem; }
@@ -340,7 +395,7 @@
 
     /* Custom dropdown arrow — replaces native arrow removed by appearance:none on .form-input */
     select.form-input {
-        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23616161'/%3E%3C/svg%3E");
+        background-image: var(--select-arrow);
         background-repeat: no-repeat;
         background-position: right 0.25rem center;
         padding-right: 1.5rem;
@@ -390,13 +445,13 @@
 
     .outcome-option.yes input:checked + label {
         background: var(--yes);
-        color: #000;
+        color: var(--yes-contrast);
         border-color: var(--yes);
     }
 
     .outcome-option.no input:checked + label {
         background: var(--no);
-        color: #fff;
+        color: var(--no-contrast);
         border-color: var(--no);
     }
 
@@ -426,13 +481,13 @@
     .btn:hover { border-color: var(--text); color: var(--text); text-decoration: none; }
 
     .btn-primary { background: var(--text); color: var(--bg); border-color: var(--text); }
-    .btn-primary:hover { background: #c8c8c8; border-color: #c8c8c8; color: var(--bg); }
+    .btn-primary:hover { opacity: 0.85; color: var(--bg); text-decoration: none; }
 
     .btn-yes { border-color: var(--yes); color: var(--yes); }
-    .btn-yes:hover { background: var(--yes); color: #000; }
+    .btn-yes:hover { background: var(--yes); color: var(--yes-contrast); }
 
     .btn-no { border-color: var(--no); color: var(--no); }
-    .btn-no:hover { background: var(--no); color: #fff; }
+    .btn-no:hover { background: var(--no); color: var(--no-contrast); }
 
     /* ─── TRADE GRID ─── */
     .trade-grid {
@@ -482,7 +537,7 @@
         content: counter(steps, decimal-leading-zero);
         font-size: 0.875rem;
         font-weight: 700;
-        color: var(--text-2);
+        color: var(--text-3);
         flex-shrink: 0;
         margin-top: 0.35rem;
         letter-spacing: 0.05em;
@@ -656,6 +711,7 @@
             {{if eq .Network "testnet"}}Testnet{{else}}Mainnet{{end}}
         </span>
         {{end}}
+        <button class="theme-toggle" onclick="(function(){var h=document.documentElement,n=h.dataset.theme==='dark'?'light':'dark';h.dataset.theme=n;localStorage.setItem('theme',n)})()" aria-label="Toggle light/dark theme">◑</button>
     </div>
 </header>
 {{end}}

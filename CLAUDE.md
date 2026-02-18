@@ -9,7 +9,7 @@ Stellar prediction market platform. Stateless web application that builds Soroba
 ## Commands
 
 - `make build` - Build for local macOS
-- `make run` - Run locally (requires ORACLE_PUBLIC_KEY env var)
+- `PORT=9090 make run` - Run locally on port 9090 (env vars inline, fish-compatible)
 - `make test` - Run tests
 - `make lint` - Format and vet code
 - `cd contracts && cargo test` - Run Soroban contract tests
