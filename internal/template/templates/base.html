@@ -1,6 +1,7 @@
 {{define "styles"}}
+<!-- Theme init: runs sync before CSS to prevent FOUC. Must stay in <head> before <style>. -->
 <script>
-(function(){var t=localStorage.getItem('theme')||(matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light');document.documentElement.dataset.theme=t})();
+(function(){var t,mq;try{t=localStorage.getItem('theme')}catch(e){console.warn('[Total] localStorage unavailable:',e)}mq=typeof matchMedia==='function'&&matchMedia('(prefers-color-scheme:dark)');document.documentElement.dataset.theme=t||(mq&&mq.matches?'dark':'light')})();
 </script>
 <style>
     /* ─── DARK THEME (poimandres) — default ─── */
@@ -24,6 +25,8 @@
     }
 
     /* ─── LIGHT THEME ─── */
+    /* @media block is the CSS-only fallback for no-JS environments;
+       html[data-theme] rules below always take precedence when JS runs. */
     @media (prefers-color-scheme: light) {
         :root {
             --bg: #f8f9ff;
@@ -140,8 +143,11 @@
     }
 
     .theme-toggle:hover { color: var(--text); border-color: var(--text-2); }
+    .theme-toggle:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
 
-    /* Sun visible in dark mode, moon in light mode */
+    /* Sun shown when in dark theme (click to go light); moon shown when in light theme (click to go dark).
+       Default (no data-theme): sun shown — matches dark default in :root.
+       @media rules below are the no-JS CSS fallback; html[data-theme] always wins when JS runs. */
     .theme-icon-moon { display: none; }
     .theme-icon-sun  { display: block; }
 
@@ -208,7 +214,7 @@
         gap: 1px;
         background: var(--border); /* 1px gap shows border color between cards */
         border: 1px solid var(--border);
-        /* auto-fit collapses empty columns so a single card fills full width */
+        /* auto-fit (not auto-fill) collapses empty column tracks — a single card stretches to full width */
         grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
     }
 
@@ -411,6 +417,11 @@
     .form-input:focus {
         outline: none;
         border-bottom-color: var(--text);
+    }
+
+    .form-input:focus-visible {
+        outline: 2px solid var(--text);
+        outline-offset: 2px;
     }
 
     .form-input::placeholder { color: var(--text-3); }
@@ -727,7 +738,7 @@
 <header class="header">
     <a href="/" class="header-brand">Total</a>
     <div class="header-right">
-        <button class="theme-toggle" onclick="(function(){var h=document.documentElement,n=h.dataset.theme==='dark'?'light':'dark';h.dataset.theme=n;localStorage.setItem('theme',n)})()" aria-label="Toggle light/dark theme">
+        <button class="theme-toggle" onclick="(function(){var h=document.documentElement,n=h.dataset.theme==='dark'?'light':'dark';h.dataset.theme=n;try{localStorage.setItem('theme',n)}catch(e){console.warn('[Total] Cannot save theme:',e)}})()" aria-label="Toggle light/dark theme">
             <svg class="theme-icon theme-icon-sun" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>
             </svg>
