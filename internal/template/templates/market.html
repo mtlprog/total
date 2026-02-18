@@ -33,7 +33,6 @@
             </div>
             {{end}}
 
-            <!-- Prices -->
             <div class="panel">
                 <h3 class="panel-title">Current Prices</h3>
                 <div class="price-display">
@@ -63,7 +62,6 @@
             {{end}}
 
             {{if not .Market.IsResolved}}
-            <!-- Trade -->
             <div class="trade-grid">
                 <div class="panel">
                     <h3 class="panel-title">Buy Tokens</h3>
@@ -122,7 +120,6 @@
                 </div>
             </div>
             {{else}}
-            <!-- Claim -->
             <div class="panel">
                 <h3 class="panel-title">Claim Winnings</h3>
                 <p style="font-size: 0.825rem; color: var(--text-2); margin-bottom: 1.25rem;">
@@ -138,7 +135,6 @@
             </div>
             {{end}}
 
-            <!-- Market Details -->
             <div class="panel">
                 <h3 class="panel-title">Market Details</h3>
                 {{if not .Market.EndDate.IsZero}}
@@ -185,7 +181,7 @@
                 <div class="meta-row">
                     <span class="meta-key">IPFS</span>
                     <span class="meta-val">
-                        <a href="https://gateway.pinata.cloud/ipfs/{{.Market.MetadataHash}}" target="_blank">{{shortID .Market.MetadataHash}}</a>
+                        <a href="https://gateway.pinata.cloud/ipfs/{{.Market.MetadataHash}}" target="_blank" rel="noopener">{{shortID .Market.MetadataHash}}</a>
                     </span>
                 </div>
                 {{end}}

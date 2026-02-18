@@ -1,7 +1,5 @@
 {{define "styles"}}
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap');
-
     :root {
         --bg: #090909;
         --bg-surface: #111111;
@@ -340,7 +338,7 @@
 
     .form-input::placeholder { color: var(--text-3); }
 
-    /* Select arrow */
+    /* Custom dropdown arrow — replaces native arrow removed by appearance:none on .form-input */
     select.form-input {
         background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23616161'/%3E%3C/svg%3E");
         background-repeat: no-repeat;
@@ -400,6 +398,11 @@
         background: var(--no);
         color: #fff;
         border-color: var(--no);
+    }
+
+    .outcome-option input[type="radio"]:focus-visible + label {
+        outline: 2px solid var(--text);
+        outline-offset: -2px;
     }
 
     /* ─── BUTTONS ─── */
@@ -550,7 +553,7 @@
         margin-bottom: 1.75rem;
     }
 
-    /* ─── BACK LINK ─── */
+    /* ─── BACK LINK / BACK LINKS ─── */
     .back-link {
         display: inline-flex;
         align-items: center;
@@ -566,7 +569,7 @@
 
     .back-link:hover { color: var(--text); text-decoration: none; }
 
-    .back-links { display: flex; gap: 1.5rem; }
+    .back-links { display: flex; gap: 1.5rem; } /* wrapper when multiple back links appear side by side */
 
     /* ─── CODE ─── */
     code {
@@ -596,7 +599,7 @@
         border-top: 1px solid var(--border);
         padding: 1.25rem 0;
         position: relative;
-        z-index: 1;
+        z-index: 1; /* ensures footer renders above .container stacking context */
     }
 
     .footer-inner {
@@ -626,7 +629,7 @@
         font-size: 0.875rem;
         letter-spacing: 0.1em;
         text-transform: uppercase;
-        color: var(--text-3);
+        color: var(--text-2);
     }
 
     /* ─── UTILITIES ─── */
@@ -661,10 +664,10 @@
 <footer class="footer">
     <div class="footer-inner">
         <div class="footer-links">
-            <a href="https://stellar.org" target="_blank">Stellar</a>
-            <a href="https://soroban.stellar.org" target="_blank">Soroban</a>
-            <a href="https://lab.stellar.org" target="_blank">Lab</a>
-            <a href="https://github.com/mtlprog/total" target="_blank">GitHub</a>
+            <a href="https://stellar.org" target="_blank" rel="noopener">Stellar</a>
+            <a href="https://soroban.stellar.org" target="_blank" rel="noopener">Soroban</a>
+            <a href="https://lab.stellar.org" target="_blank" rel="noopener">Lab</a>
+            <a href="https://github.com/mtlprog/total" target="_blank" rel="noopener">GitHub</a>
         </div>
         <span class="footer-tag">LMSR Prediction Markets on Stellar</span>
     </div>

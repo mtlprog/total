@@ -26,6 +26,9 @@
 
             {{if .Markets}}
 
+            {{$hasActive := false}}
+            {{range .Markets}}{{if not .IsResolved}}{{$hasActive = true}}{{end}}{{end}}
+            {{if $hasActive}}
             <span class="section-label">Active Markets</span>
             <div class="market-grid" style="margin-bottom: 3rem;">
                 {{range .Markets}}
@@ -58,7 +61,11 @@
                 {{end}}
                 {{end}}
             </div>
+            {{end}}
 
+            {{$hasResolved := false}}
+            {{range .Markets}}{{if .IsResolved}}{{$hasResolved = true}}{{end}}{{end}}
+            {{if $hasResolved}}
             <span class="section-label">Resolved Markets</span>
             <div class="market-grid">
                 {{range .Markets}}
@@ -88,6 +95,7 @@
                 {{end}}
                 {{end}}
             </div>
+            {{end}}
 
             {{else}}
             <div class="empty-state">
