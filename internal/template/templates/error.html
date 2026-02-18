@@ -3,21 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Error - Total</title>
+    <title>Error — Total</title>
     <meta name="description" content="An error occurred">
-    <meta property="og:title" content="Error - Total">
-    <meta property="og:description" content="An error occurred">
-    <meta property="og:type" content="website">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
     {{template "styles" .}}
 </head>
 <body>
     <div class="container">
         {{template "header" .}}
         <main class="main">
-            <a href="/" class="back-link">← Back to Markets</a>
+
+            <a href="/" class="back-link">← Markets</a>
 
             <div class="error-box">
                 {{if .ErrorCode}}
@@ -28,17 +26,16 @@
 
             <div class="panel">
                 <h3 class="panel-title">What You Can Do</h3>
-                <ul style="margin: 0; padding-left: 1.5rem; color: var(--text-dim);">
-                    <li>Check that you entered the correct information</li>
-                    <li>Ensure your Stellar account exists and is funded</li>
-                    <li>Try again in a few moments</li>
-                    <li>If the problem persists, check the Stellar network status</li>
+                <ul style="list-style: none; font-size: 0.825rem; color: var(--text-2);">
+                    <li style="padding: 0.5rem 0; border-bottom: 1px solid var(--border);">Check that you entered the correct information</li>
+                    <li style="padding: 0.5rem 0; border-bottom: 1px solid var(--border);">Ensure your Stellar account exists and is funded</li>
+                    <li style="padding: 0.5rem 0; border-bottom: 1px solid var(--border);">Try again in a few moments</li>
+                    <li style="padding: 0.5rem 0;">If the problem persists, check the Stellar network status</li>
                 </ul>
             </div>
 
-            <div style="margin-top: 1.5rem;">
-                <a href="/" class="btn">Back to Markets</a>
-            </div>
+            <a href="/" class="btn">Back to Markets</a>
+
         </main>
     </div>
     {{template "footer" .}}

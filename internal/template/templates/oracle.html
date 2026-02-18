@@ -3,45 +3,47 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Oracle Admin - Total</title>
+    <title>Oracle Admin — Total</title>
     <meta name="description" content="Deploy, resolve, and manage prediction markets on Total.">
-    <meta property="og:title" content="Oracle Admin - Total">
-    <meta property="og:description" content="Oracle administration for Total prediction markets">
-    <meta property="og:type" content="website">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
     {{template "styles" .}}
 </head>
 <body>
     <div class="container">
         {{template "header" .}}
         <main class="main">
-            <h1 style="margin: 0 0 1.5rem 0; font-size: 1.25rem;">Oracle Administration</h1>
 
-            <div class="panel">
-                <h3 class="panel-title">Oracle Info</h3>
-                <div class="meta">
-                    <div class="meta-row">
-                        <span>Oracle Public Key</span>
-                        <span class="meta-value">{{.OraclePublicKey}}</span>
-                    </div>
-                    {{if .FactoryContract}}
-                    <div class="meta-row">
-                        <span>Factory Contract</span>
-                        <span class="meta-value">{{.FactoryContract}}</span>
-                    </div>
-                    {{end}}
-                </div>
+            <div style="margin-bottom: 2rem;">
+                <span class="section-label" style="display: inline-block; margin-bottom: 0.5rem;">Oracle Administration</span>
             </div>
 
+            <!-- Oracle Info -->
+            <div class="panel">
+                <h3 class="panel-title">Oracle Info</h3>
+                <div class="meta-row">
+                    <span class="meta-key">Oracle Public Key</span>
+                    <span class="meta-val" style="font-size: 0.85rem; word-break: break-all;">{{.OraclePublicKey}}</span>
+                </div>
+                {{if .FactoryContract}}
+                <div class="meta-row">
+                    <span class="meta-key">Factory Contract</span>
+                    <span class="meta-val" style="font-size: 0.85rem; word-break: break-all;">{{.FactoryContract}}</span>
+                </div>
+                {{end}}
+            </div>
+
+            <!-- Deploy New Market -->
             <div class="panel">
                 <h3 class="panel-title">Deploy New Market</h3>
-                <p class="text-dim mb-2">Deploy a new prediction market via the factory contract.</p>
+                <p style="font-size: 0.825rem; color: var(--text-2); margin-bottom: 1.25rem;">
+                    Deploy a new prediction market via the factory contract.
+                </p>
 
-                <div class="warning mb-3">
-                    <strong>Step 1:</strong> First upload your market metadata JSON to IPFS (via <a href="https://app.pinata.cloud/" target="_blank">Pinata</a>).
-                    <pre style="margin: 0.75rem 0 0 0; color: var(--text);">{
+                <div class="warning-box">
+                    <strong>Step 1:</strong> Upload metadata JSON to IPFS via <a href="https://app.pinata.cloud/" target="_blank">Pinata</a> first.
+                    <pre>{
   "question": "Will BTC reach $100k by end of 2025?",
   "description": "Resolution criteria...",
   "resolution_source": "coinbase.com",
@@ -52,20 +54,20 @@
 
                 <form method="POST" action="/deploy">
                     <div class="form-group">
-                        <label>IPFS Metadata Hash (CID) *</label>
-                        <input type="text" name="metadata_hash" required placeholder="QmXxx... or bafyxxx...">
+                        <label class="form-label">IPFS Metadata Hash (CID) *</label>
+                        <input class="form-input" type="text" name="metadata_hash" required placeholder="QmXxx... or bafyxxx...">
                         <span class="form-help">The IPFS CID of your uploaded metadata JSON.</span>
                     </div>
 
                     <div class="form-group">
-                        <label>Liquidity Parameter (b)</label>
-                        <input type="number" name="liquidity_param" value="{{.DefaultLiquidityParam}}" min="1" step="0.01">
-                        <span class="form-help">Higher = more liquidity, lower price impact. Recommended: 100-1000.</span>
+                        <label class="form-label">Liquidity Parameter (b)</label>
+                        <input class="form-input" type="number" name="liquidity_param" value="{{.DefaultLiquidityParam}}" min="1" step="0.01">
+                        <span class="form-help">Higher = more liquidity, lower price impact. Recommended: 100–1000.</span>
                     </div>
 
                     <div class="form-group">
-                        <label>Initial Funding (collateral tokens)</label>
-                        <input type="number" name="initial_funding" value="70" min="1" step="0.01">
+                        <label class="form-label">Initial Funding (collateral tokens)</label>
+                        <input class="form-input" type="number" name="initial_funding" value="70" min="1" step="0.01">
                         <span class="form-help">Must be at least 70% of liquidity parameter (b × 0.7).</span>
                     </div>
 
@@ -74,20 +76,24 @@
             </div>
 
             {{if .MarketsError}}
-            <div class="panel">
-                <div class="warning">{{.MarketsError}}</div>
+            <div class="error-box">
+                <div class="error-message">{{.MarketsError}}</div>
             </div>
             {{end}}
 
             {{if .Markets}}
+
+            <!-- Resolve Market -->
             <div class="panel">
                 <h3 class="panel-title">Resolve Market</h3>
-                <p class="text-dim mb-2">Resolve an active market by selecting the winning outcome.</p>
+                <p style="font-size: 0.825rem; color: var(--text-2); margin-bottom: 1.25rem;">
+                    Resolve an active market by selecting the winning outcome.
+                </p>
 
                 <form method="POST" action="" id="resolve-form">
                     <div class="form-group">
-                        <label>Select Market</label>
-                        <select name="market_id" required onchange="document.getElementById('resolve-form').action = '/market/' + this.value + '/resolve';">
+                        <label class="form-label">Select Market</label>
+                        <select class="form-input" name="market_id" required onchange="document.getElementById('resolve-form').action = '/market/' + this.value + '/resolve';">
                             <option value="">Choose a market...</option>
                             {{range .Markets}}
                             {{if not .IsResolved}}
@@ -98,16 +104,16 @@
                     </div>
 
                     <div class="form-group">
-                        <label>Winning Outcome</label>
-                        <div class="radio-group">
-                            <label class="radio-option">
-                                <input type="radio" name="outcome" value="YES" required>
-                                <span class="text-yes font-bold">YES</span>
-                            </label>
-                            <label class="radio-option">
-                                <input type="radio" name="outcome" value="NO">
-                                <span class="text-no font-bold">NO</span>
-                            </label>
+                        <label class="form-label">Winning Outcome</label>
+                        <div class="outcome-group">
+                            <div class="outcome-option yes">
+                                <input type="radio" name="outcome" value="YES" id="resolve-yes" required>
+                                <label for="resolve-yes">Yes</label>
+                            </div>
+                            <div class="outcome-option no">
+                                <input type="radio" name="outcome" value="NO" id="resolve-no">
+                                <label for="resolve-no">No</label>
+                            </div>
                         </div>
                     </div>
 
@@ -115,16 +121,19 @@
                 </form>
             </div>
 
+            <!-- Withdraw Remaining Pool -->
             <div class="panel">
                 <h3 class="panel-title">Withdraw Remaining Pool</h3>
-                <p class="text-dim mb-2">After all claims are processed, withdraw any remaining funds (unclaimed winnings, fees, losing bets).</p>
+                <p style="font-size: 0.825rem; color: var(--text-2); margin-bottom: 1.25rem;">
+                    After all claims are processed, withdraw remaining funds from resolved markets.
+                </p>
 
                 <form method="POST" action="" id="withdraw-form">
                     <input type="hidden" name="oracle_public_key" value="{{.OraclePublicKey}}">
 
                     <div class="form-group">
-                        <label>Select Resolved Market</label>
-                        <select name="market_id" required onchange="document.getElementById('withdraw-form').action = '/market/' + this.value + '/withdraw';">
+                        <label class="form-label">Select Resolved Market</label>
+                        <select class="form-input" name="market_id" required onchange="document.getElementById('withdraw-form').action = '/market/' + this.value + '/withdraw';">
                             <option value="">Choose a market...</option>
                             {{range .Markets}}
                             {{if .IsResolved}}
@@ -137,8 +146,10 @@
                     <button type="submit" class="btn">Generate Withdraw Transaction</button>
                 </form>
             </div>
+
             {{end}}
 
+            <!-- How It Works -->
             <div class="panel">
                 <h3 class="panel-title">How It Works</h3>
                 <ol class="steps">
@@ -152,6 +163,7 @@
                     <li>After claims period, withdraw remaining pool</li>
                 </ol>
             </div>
+
         </main>
     </div>
     {{template "footer" .}}

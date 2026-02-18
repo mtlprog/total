@@ -3,52 +3,51 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sign Transaction - Total</title>
+    <title>Sign Transaction — Total</title>
     <meta name="description" content="Sign and submit your Stellar transaction.">
-    <meta property="og:title" content="Transaction Ready - Total">
-    <meta property="og:description" content="Sign and submit your prediction market transaction">
-    <meta property="og:type" content="website">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
     {{template "styles" .}}
 </head>
 <body>
     <div class="container">
         {{template "header" .}}
         <main class="main">
-            <a href="/" class="back-link">← Back to Markets</a>
-            {{if and .MarketID (ne .MarketID "new")}}
-            <a href="/market/{{.MarketID}}" class="back-link" style="margin-left: 1rem;">View Market</a>
-            {{end}}
 
-            <h1 class="success-indicator" style="margin: 0 0 0.5rem 0; font-size: 1.25rem;">Transaction Ready</h1>
-            <p class="text-dim mb-3">{{.Result.Description}}</p>
+            <div class="back-links">
+                <a href="/" class="back-link">← Markets</a>
+                {{if and .MarketID (ne .MarketID "new")}}
+                <a href="/market/{{.MarketID}}" class="back-link">View Market</a>
+                {{end}}
+            </div>
+
+            <div style="margin-bottom: 1.75rem;">
+                <div style="font-size: 0.75rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--yes); margin-bottom: 0.4rem;">Transaction Ready</div>
+                <p style="font-size: 1rem; color: var(--text-2);">{{.Result.Description}}</p>
+            </div>
 
             <div class="panel">
                 <h3 class="panel-title">Transaction Details</h3>
-                <div class="meta">
-                    <div class="meta-row">
-                        <span>Sign With</span>
-                        <span class="meta-value">{{.Result.SignWith}}</span>
-                    </div>
-                    <div class="meta-row">
-                        <span>Submit To</span>
-                        <span class="meta-value">{{.Result.SubmitURL}}</span>
-                    </div>
+                <div class="meta-row">
+                    <span class="meta-key">Sign With</span>
+                    <span class="meta-val">{{.Result.SignWith}}</span>
+                </div>
+                <div class="meta-row">
+                    <span class="meta-key">Submit To</span>
+                    <span class="meta-val" style="font-size: 0.85rem;">{{.Result.SubmitURL}}</span>
                 </div>
             </div>
 
             <div class="panel">
                 <h3 class="panel-title">Transaction XDR</h3>
                 <div class="xdr-box" id="xdr">{{.Result.XDR}}</div>
-                <p class="text-muted" style="margin-top: 0.5rem; font-size: 0.8rem;">
-                    Select all and copy (Ctrl+A, Ctrl+C / Cmd+A, Cmd+C)
+                <p style="font-size: 0.82rem; color: var(--text-2); margin-top: 0.6rem;">
+                    Select all and copy — Ctrl+A, Ctrl+C / Cmd+A, Cmd+C
                 </p>
-
                 <div style="margin-top: 1rem;">
                     <a href="{{labURL .Result.XDR .NetworkPassphrase}}" target="_blank" class="btn btn-primary">
-                        Open in Stellar Lab
+                        Open in Stellar Lab →
                     </a>
                 </div>
             </div>
@@ -61,12 +60,12 @@
                     <li>Sign with your secret key (<code>{{truncate .Result.SignWith 20}}</code>)</li>
                     <li>Submit the signed transaction</li>
                 </ol>
-
-                <div class="warning">
+                <div class="warning-box" style="margin-top: 1.25rem; margin-bottom: 0;">
                     <strong>Security:</strong> Never share your secret key. Only sign transactions you understand.
                     The XDR above does not contain any private keys.
                 </div>
             </div>
+
         </main>
     </div>
     {{template "footer" .}}

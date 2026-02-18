@@ -3,20 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Total - All Prediction Markets</title>
-    <meta name="description" content="Browse and trade on decentralized prediction markets powered by Stellar and Soroban.">
-    <meta property="og:title" content="Total - Prediction Markets">
+    <title>Total — Prediction Markets</title>
+    <meta name="description" content="Decentralized prediction markets powered by Stellar and Soroban.">
+    <meta property="og:title" content="Total — Prediction Markets">
     <meta property="og:description" content="Decentralized prediction markets on Stellar">
     <meta property="og:type" content="website">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
     {{template "styles" .}}
 </head>
 <body>
     <div class="container">
         {{template "header" .}}
         <main class="main">
+
             {{if .Error}}
             <div class="error-box">
                 <div class="error-message">{{.Error}}</div>
@@ -24,73 +25,78 @@
             {{end}}
 
             {{if .Markets}}
-            <!-- Active Markets Section -->
-            <h2 class="section-title">Active Markets</h2>
-            <div class="market-list">
+
+            <span class="section-label">Active Markets</span>
+            <div class="market-grid" style="margin-bottom: 3rem;">
                 {{range .Markets}}
                 {{if not .IsResolved}}
-                <a href="/market/{{.ID}}" class="card card-link">
-                    <h2 class="card-title">{{.Question}}</h2>
-
-                    <div class="prices">
-                        <div class="price">
-                            <span class="price-label">YES</span>
-                            <span class="price-value price-yes">{{printf "%.1f" (mul .PriceYes 100)}}%</span>
+                <a href="/market/{{.ID}}" class="market-card">
+                    <div class="market-card-arrow">→</div>
+                    <div class="market-card-status">Active</div>
+                    <div class="market-card-question">{{.Question}}</div>
+                    <div class="market-card-prices">
+                        <div class="market-price">
+                            <span class="market-price-label">Yes</span>
+                            <span class="market-price-value yes">{{printf "%.0f" (mul .PriceYes 100)}}%</span>
                         </div>
-                        <div class="price">
-                            <span class="price-label">NO</span>
-                            <span class="price-value price-no">{{printf "%.1f" (mul .PriceNo 100)}}%</span>
+                        <div class="market-price">
+                            <span class="market-price-label">No</span>
+                            <span class="market-price-value no">{{printf "%.0f" (mul .PriceNo 100)}}%</span>
                         </div>
                     </div>
-
-                    <div class="meta">
-                        Volume: {{printf "%.0f" .YesSold}} YES / {{printf "%.0f" .NoSold}} NO
-                        <span class="text-muted"> · {{shortID .ID}}</span>
+                    <div class="prob-bar">
+                        <div class="prob-bar-yes" style="width: {{printf "%.1f" (mul .PriceYes 100)}}%"></div>
+                        <div class="prob-bar-no"></div>
+                    </div>
+                    <div class="market-card-meta">
+                        <span>Vol: {{printf "%.0f" .YesSold}} YES / {{printf "%.0f" .NoSold}} NO</span>
                     </div>
                     {{if .MetadataError}}
-                    <div class="warning" style="margin-top: 0.75rem; margin-bottom: 0;">{{.MetadataError}}</div>
+                    <div class="warning-box" style="margin-top: 0.75rem; margin-bottom: 0; font-size: 0.65rem;">{{.MetadataError}}</div>
                     {{end}}
                 </a>
                 {{end}}
                 {{end}}
             </div>
 
-            <!-- Resolved Markets Section -->
-            <h2 class="section-title">Resolved Markets</h2>
-            <div class="market-list">
+            <span class="section-label">Resolved Markets</span>
+            <div class="market-grid">
                 {{range .Markets}}
                 {{if .IsResolved}}
-                <a href="/market/{{.ID}}" class="card card-link">
-                    <h2 class="card-title">{{.Question}}</h2>
-
-                    <div class="prices">
-                        <div class="price">
-                            <span class="price-label">YES</span>
-                            <span class="price-value price-yes">{{printf "%.1f" (mul .PriceYes 100)}}%</span>
+                <a href="/market/{{.ID}}" class="market-card">
+                    <div class="market-card-arrow">→</div>
+                    <div class="market-card-status resolved">Resolved · {{.Resolution}}</div>
+                    <div class="market-card-question">{{.Question}}</div>
+                    <div class="market-card-prices">
+                        <div class="market-price">
+                            <span class="market-price-label">Yes</span>
+                            <span class="market-price-value yes">{{printf "%.0f" (mul .PriceYes 100)}}%</span>
                         </div>
-                        <div class="price">
-                            <span class="price-label">NO</span>
-                            <span class="price-value price-no">{{printf "%.1f" (mul .PriceNo 100)}}%</span>
+                        <div class="market-price">
+                            <span class="market-price-label">No</span>
+                            <span class="market-price-value no">{{printf "%.0f" (mul .PriceNo 100)}}%</span>
                         </div>
                     </div>
-
-                    <div class="meta">
-                        <span class="text-accent font-bold">RESOLVED: {{.Resolution}}</span>
-                        <span class="text-muted"> · {{shortID .ID}}</span>
+                    <div class="prob-bar">
+                        <div class="prob-bar-yes" style="width: {{printf "%.1f" (mul .PriceYes 100)}}%"></div>
+                        <div class="prob-bar-no"></div>
                     </div>
-                    {{if .MetadataError}}
-                    <div class="warning" style="margin-top: 0.75rem; margin-bottom: 0;">{{.MetadataError}}</div>
-                    {{end}}
+                    <div class="market-card-meta">
+                        <span>Vol: {{printf "%.0f" .YesSold}} YES / {{printf "%.0f" .NoSold}} NO</span>
+                    </div>
                 </a>
                 {{end}}
                 {{end}}
             </div>
+
             {{else}}
             <div class="empty-state">
-                <p>No markets yet.</p>
-                <a href="/oracle" class="btn btn-primary">Deploy First Market</a>
+                <div class="empty-state-hint">No markets yet</div>
+                <p>Deploy the first prediction market to get started.</p>
+                <a href="/oracle" class="btn btn-primary">Deploy Market</a>
             </div>
             {{end}}
+
         </main>
     </div>
     {{template "footer" .}}
