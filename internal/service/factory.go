@@ -12,6 +12,7 @@ import (
 	"github.com/mtlprog/total/internal/model"
 	"github.com/mtlprog/total/internal/soroban"
 	"github.com/mtlprog/total/internal/stellar"
+	"github.com/samber/hot"
 )
 
 var (
@@ -28,6 +29,7 @@ type FactoryService struct {
 	oraclePublicKey string
 	logger          *slog.Logger
 	stateCache      *StateCache
+	marketListCache *hot.HotCache[string, []string]
 }
 
 // NewFactoryService creates a new factory service.
@@ -64,6 +66,22 @@ func NewFactoryService(
 		return result, nil
 	})
 
+	// Initialize market list cache (single entry, keyed by "all")
+	fs.marketListCache = hot.NewHotCache[string, []string](hot.LRU, 1).
+		WithTTL(marketListCacheTTL).
+		WithRevalidation(marketListCacheTTL, func(keys []string) (map[string][]string, error) {
+			ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+			defer cancel()
+			ids, err := fs.fetchMarketList(ctx)
+			if err != nil {
+				logger.Warn("market list cache revalidation failed", "error", err)
+				return nil, err
+			}
+			return map[string][]string{"all": ids}, nil
+		}).
+		WithRevalidationErrorPolicy(hot.KeepOnError).
+		Build()
+
 	return fs
 }
 
@@ -77,12 +95,34 @@ func (s *FactoryService) FactoryContractID() string {
 	return s.factoryContract
 }
 
+const marketListCacheTTL = 30 * time.Second
+
 // ListMarkets returns all market contract IDs from the factory.
+// Results are cached with stale-while-revalidate via hot cache.
 func (s *FactoryService) ListMarkets(ctx context.Context) ([]string, error) {
 	if s.factoryContract == "" {
 		return nil, ErrFactoryNotConfigured
 	}
 
+	ids, found, err := s.marketListCache.Get("all")
+	if err != nil {
+		s.logger.Warn("market list cache error, fetching fresh", "error", err)
+	}
+	if found {
+		return ids, nil
+	}
+
+	// Cache miss — fetch and store
+	ids, err = s.fetchMarketList(ctx)
+	if err != nil {
+		return nil, err
+	}
+	s.marketListCache.Set("all", ids)
+	return ids, nil
+}
+
+// fetchMarketList fetches market IDs from the factory contract via RPC.
+func (s *FactoryService) fetchMarketList(ctx context.Context) ([]string, error) {
 	txXDR, err := s.txBuilder.BuildListMarketsTx(ctx, stellar.ListMarketsTxParams{
 		UserPublicKey:   s.oraclePublicKey,
 		FactoryContract: s.factoryContract,

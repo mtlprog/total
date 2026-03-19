@@ -45,7 +45,12 @@
                 <p style="font-size: 0.82rem; color: var(--text-2); margin-top: 0.6rem;">
                     Select all and copy — Ctrl+A, Ctrl+C / Cmd+A, Cmd+C
                 </p>
-                <div style="margin-top: 1rem;">
+                <div style="margin-top: 1rem; display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                    {{if not (isTestnet .NetworkPassphrase)}}
+                    <button id="mtl-wallet-btn" class="btn btn-yes" onclick="openMTLWallet()" style="min-width: 200px;">
+                        Sign with MTL Wallet →
+                    </button>
+                    {{end}}
                     <a href="{{labURL .Result.XDR .NetworkPassphrase}}" target="_blank" rel="noopener" class="btn btn-primary">
                         Open in Stellar Lab →
                     </a>
@@ -69,5 +74,39 @@
         </main>
     </div>
     {{template "footer" .}}
+
+    {{if not (isTestnet .NetworkPassphrase)}}
+    <script>
+    function openMTLWallet() {
+        var btn = document.getElementById('mtl-wallet-btn');
+        var origText = btn.textContent;
+        btn.textContent = 'Connecting...';
+        btn.disabled = true;
+
+        var body = new URLSearchParams();
+        body.append('uri', {{stellarURI .Result.XDR}});
+
+        fetch('/api/mtl-wallet', { method: 'POST', body: body })
+        .then(function(r) {
+            if (!r.ok) throw new Error(r.statusText);
+            return r.json();
+        })
+        .then(function(data) {
+            if (data.url) {
+                window.open(data.url, '_blank');
+            } else {
+                alert('MTL Wallet returned an unexpected response. Use Stellar Lab instead.');
+            }
+        })
+        .catch(function() {
+            alert('Could not reach MTL Wallet. Use Stellar Lab instead.');
+        })
+        .finally(function() {
+            btn.textContent = origText;
+            btn.disabled = false;
+        });
+    }
+    </script>
+    {{end}}
 </body>
 </html>

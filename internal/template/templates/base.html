@@ -829,13 +829,35 @@
     .outcome-card.yes .outcome-card-price { color: var(--yes); }
     .outcome-card.no  .outcome-card-price { color: var(--no); }
 
+    .outcome-card-token-price {
+        font-size: 0.825rem;
+        color: var(--text-2);
+        margin-top: 0.25rem;
+    }
+
     .outcome-card-balance {
         font-size: 0.825rem;
         color: var(--text-2);
-        margin-top: 0.5rem;
+        margin-top: 0.25rem;
     }
 
     /* ─── TRADE FORM (unified) ─── */
+    .panel:has(#trade-form) {
+        transition: border-color 0.15s;
+    }
+    .panel:has(#trade-form.outcome-yes) { border-color: var(--yes); }
+    .panel:has(#trade-form.outcome-no)  { border-color: var(--no); }
+
+    #trade-form .trade-selected-label {
+        font-size: 0.825rem;
+        font-weight: 700;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        margin-bottom: 0.75rem;
+    }
+    #trade-form.outcome-yes .trade-selected-label { color: var(--yes); }
+    #trade-form.outcome-no  .trade-selected-label { color: var(--no); }
+
     .trade-form {
         display: flex;
         gap: 0.75rem;
@@ -848,6 +870,20 @@
     .trade-actions {
         display: flex;
         gap: 0.5rem;
+    }
+
+    .trade-estimate {
+        font-size: 1rem;
+        font-weight: 700;
+        margin-top: 0.75rem;
+    }
+    #trade-form.outcome-yes .trade-estimate { color: var(--yes); }
+    #trade-form.outcome-no  .trade-estimate { color: var(--no); }
+
+    .trade-hint {
+        font-size: 0.75rem;
+        color: var(--text-2);
+        margin-top: 0.25rem;
     }
 
     /* ─── TRADE HISTORY ─── */
@@ -912,10 +948,8 @@
                 <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
             </svg>
         </button>
-        {{if .Network}}
-        <span class="network-badge {{if eq .Network "testnet"}}testnet{{else}}mainnet{{end}}">
-            {{if eq .Network "testnet"}}Testnet{{else}}Mainnet{{end}}
-        </span>
+        {{if eq .Network "testnet"}}
+        <span class="network-badge testnet">Testnet</span>
         {{end}}
     </div>
 </header>
