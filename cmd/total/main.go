@@ -56,6 +56,10 @@ func run() error {
 		"factory", cfg.FactoryContract,
 	)
 
+	if cfg.Network == "mainnet" {
+		slog.Warn("RUNNING ON MAINNET — real funds at risk")
+	}
+
 	// Initialize Stellar client
 	stellarClient, err := stellar.NewHorizonClient(
 		cfg.NetworkConfig.HorizonURL,

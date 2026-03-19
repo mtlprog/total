@@ -283,6 +283,45 @@ func (b *Builder) BuildGetSellQuoteTx(ctx context.Context, params GetQuoteTxPara
 	return b.contractInvoker.BuildInvokeTx(ctx, invokeParams)
 }
 
+// GetBalanceTxParams contains parameters for getting a user's token balance.
+type GetBalanceTxParams struct {
+	UserPublicKey string
+	ContractID    string
+	Account       string // Address to check balance for
+	Outcome       uint32 // 0 for YES, 1 for NO
+}
+
+// BuildGetBalanceTx builds a transaction to call market.get_balance() (simulation only).
+func (b *Builder) BuildGetBalanceTx(ctx context.Context, params GetBalanceTxParams) (string, error) {
+	if b.contractInvoker == nil {
+		return "", fmt.Errorf("soroban client not configured")
+	}
+
+	userAccount, err := b.client.GetAccount(ctx, params.UserPublicKey)
+	if err != nil {
+		return "", fmt.Errorf("failed to get user account: %w", err)
+	}
+
+	accountAddr, err := soroban.EncodeAddress(params.Account)
+	if err != nil {
+		return "", fmt.Errorf("failed to encode account address: %w", err)
+	}
+
+	args := []xdr.ScVal{
+		accountAddr,
+		soroban.EncodeU32(params.Outcome),
+	}
+
+	invokeParams := soroban.InvokeParams{
+		SourceAccount: userAccount,
+		ContractID:    params.ContractID,
+		FunctionName:  "get_balance",
+		Args:          args,
+	}
+
+	return b.contractInvoker.BuildInvokeTx(ctx, invokeParams)
+}
+
 // SimulateAndPrepareTx simulates a Soroban transaction and returns it with resources attached.
 func (b *Builder) SimulateAndPrepareTx(ctx context.Context, txXDR string) (string, error) {
 	if b.contractInvoker == nil {

@@ -9,7 +9,9 @@ services:
     entrypoint: ["/app/total"]
     command: ["serve"]
     environment:
+      - NETWORK=${NETWORK:-testnet}
       - ORACLE_PUBLIC_KEY=${ORACLE_PUBLIC_KEY}
+      - MARKET_FACTORY_CONTRACT=${MARKET_FACTORY_CONTRACT}
       - PINATA_API_KEY=${PINATA_API_KEY:-}
       - PINATA_SECRET=${PINATA_SECRET:-}
       - MARKET_IDS=${MARKET_IDS:-}

@@ -265,6 +265,20 @@ func (h *MarketHandler) handleMarketDetail(w http.ResponseWriter, r *http.Reques
 		market.Question = "Market " + shortID(contractID)
 	}
 
+	// Check for balance query
+	var userBalance *service.UserBalance
+	accountKey := strings.TrimSpace(r.URL.Query().Get("account"))
+	if accountKey != "" {
+		if _, err := keypair.ParseAddress(accountKey); err == nil {
+			balance, err := h.marketService.GetBalance(ctx, contractID, accountKey)
+			if err != nil {
+				h.logger.Warn("failed to get user balance", "account", accountKey, "error", err)
+			} else {
+				userBalance = balance
+			}
+		}
+	}
+
 	data := map[string]any{
 		"Market":          &market,
 		"OraclePublicKey": h.oraclePublicKey,
@@ -272,6 +286,8 @@ func (h *MarketHandler) handleMarketDetail(w http.ResponseWriter, r *http.Reques
 		"PriceChart":      "", // TODO: add price history chart
 		"ActiveNav":       "markets",
 		"Network":         h.networkName(),
+		"UserBalance":     userBalance,
+		"AccountKey":      accountKey,
 	}
 
 	if err := h.tmpl.Render(w, "market", data); err != nil {
