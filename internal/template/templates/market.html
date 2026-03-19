@@ -145,6 +145,12 @@
             </div>
             {{end}}
 
+            {{if .EventsError}}
+            <div class="panel">
+                <p style="font-size: 0.825rem; color: var(--no);">{{.EventsError}}</p>
+            </div>
+            {{end}}
+
             {{if .TradeEvents}}
             <div class="panel">
                 <h3 class="panel-title">Trade History</h3>

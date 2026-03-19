@@ -282,8 +282,9 @@ func (h *MarketHandler) handleMarketDetail(w http.ResponseWriter, r *http.Reques
 		PriceNo:  state.PriceNo,
 	}
 
+	// TODO: fetch actual winning outcome from contract (get_state doesn't return it yet)
 	if state.Resolved {
-		market.Resolution = model.OutcomeYes // TODO: get actual resolution from contract
+		market.Resolution = model.OutcomeYes
 	}
 
 	// Fetch metadata from IPFS
@@ -332,10 +333,12 @@ func (h *MarketHandler) handleMarketDetail(w http.ResponseWriter, r *http.Reques
 	// Fetch trade events and build price chart
 	var tradeEvents []service.TradeEvent
 	var priceChart string
+	var eventsError string
 	if h.eventService != nil {
 		events, err := h.eventService.GetTradeEvents(ctx, contractID)
 		if err != nil {
 			h.logger.Warn("failed to get trade events", "contract_id", contractID, "error", err)
+			eventsError = "Failed to load trade history."
 		} else {
 			tradeEvents = events
 			if len(events) > 0 {
@@ -350,6 +353,7 @@ func (h *MarketHandler) handleMarketDetail(w http.ResponseWriter, r *http.Reques
 		"OraclePublicKey": h.oraclePublicKey,
 		"PriceChart":      priceChart,
 		"TradeEvents":     tradeEvents,
+		"EventsError":     eventsError,
 		"ActiveNav":       "markets",
 		"Network":         h.networkName(),
 		"UserBalance":     userBalance,
@@ -791,10 +795,12 @@ func (h *MarketHandler) handleOutcomePage(w http.ResponseWriter, r *http.Request
 	// Get user balance from cookie
 	accountID := accountIDFromCookie(r)
 	var userBalance *service.UserBalance
+	var balanceError string
 	if accountID != "" {
 		balance, err := h.marketService.GetBalance(ctx, contractID, accountID)
 		if err != nil {
 			h.logger.Warn("failed to get user balance for outcome page", "error", err)
+			balanceError = "Failed to load balance — please try again."
 		} else {
 			userBalance = balance
 		}
@@ -817,6 +823,7 @@ func (h *MarketHandler) handleOutcomePage(w http.ResponseWriter, r *http.Request
 		"OGTitle":           ogTitle,
 		"OGDescription":     ogDescription,
 		"UserBalance":       userBalance,
+		"BalanceError":      balanceError,
 		"AccountID":         accountID,
 		"ActiveNav":         "markets",
 		"Network":           h.networkName(),
@@ -830,19 +837,21 @@ func (h *MarketHandler) handleOutcomePage(w http.ResponseWriter, r *http.Request
 }
 
 // eventsToChartPoints converts trade events into price points for charting.
-// Uses cumulative sold quantities to approximate price via the same ratio method.
+// NOTE: This is a ratio-based approximation, not true LMSR pricing (which requires
+// the liquidity parameter b). See calculatePrices in factory.go for the same caveat.
 func eventsToChartPoints(events []service.TradeEvent) []model.PricePoint {
 	var yesSold, noSold float64
 	points := make([]model.PricePoint, 0, len(events))
 
 	for _, evt := range events {
-		if evt.Kind == "buy" {
+		switch evt.Kind {
+		case service.TradeKindBuy:
 			if evt.Outcome == "YES" {
 				yesSold += evt.Amount
 			} else {
 				noSold += evt.Amount
 			}
-		} else if evt.Kind == "sell" {
+		case service.TradeKindSell:
 			if evt.Outcome == "YES" {
 				yesSold -= evt.Amount
 			} else {
@@ -850,7 +859,15 @@ func eventsToChartPoints(events []service.TradeEvent) []model.PricePoint {
 			}
 		}
 
-		// Calculate approximate YES price
+		// Clamp to non-negative (partial event windows may cause underflow)
+		if yesSold < 0 {
+			yesSold = 0
+		}
+		if noSold < 0 {
+			noSold = 0
+		}
+
+		// Approximate YES price from ratio
 		total := yesSold + noSold
 		priceYes := 0.5
 		if total > 0 {
@@ -1143,7 +1160,7 @@ func (h *MarketHandler) writeError(w http.ResponseWriter, r *http.Request, err e
 		"Network":      h.networkName(),
 	}
 	if tmplErr := h.tmpl.Render(w, "error", data); tmplErr != nil {
+		// Headers already sent — cannot recover, just log
 		h.logger.Error("failed to render error template", "error", tmplErr)
-		http.Error(w, resp.Message, resp.Status)
 	}
 }

@@ -4,19 +4,33 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"sync"
+	"slices"
 	"time"
 
 	"github.com/mtlprog/total/internal/soroban"
+	"github.com/samber/hot"
 	"github.com/stellar/go-stellar-sdk/xdr"
 )
 
 // lookbackLedgers is ~24 hours at 5s/ledger.
 const lookbackLedgers = 17280
 
+const (
+	eventCacheTTL  = 5 * time.Minute
+	eventCacheSize = 500
+)
+
+// TradeKind represents the type of trade event.
+type TradeKind string
+
+const (
+	TradeKindBuy  TradeKind = "buy"
+	TradeKindSell TradeKind = "sell"
+)
+
 // TradeEvent represents a parsed buy/sell event from the contract.
 type TradeEvent struct {
-	Kind      string    // "buy" or "sell"
+	Kind      TradeKind // TradeKindBuy or TradeKindSell
 	User      string    // G... address
 	Outcome   string    // "YES" or "NO"
 	Amount    float64   // human-readable tokens
@@ -29,52 +43,50 @@ type TradeEvent struct {
 type EventService struct {
 	sorobanClient *soroban.Client
 	logger        *slog.Logger
-	mu            sync.RWMutex
-	cache         map[string]eventCacheEntry
+	cache         *hot.HotCache[string, []TradeEvent]
 }
-
-type eventCacheEntry struct {
-	events    []TradeEvent
-	fetchedAt time.Time
-}
-
-const eventCacheTTL = 5 * time.Minute
 
 // NewEventService creates a new event service.
 func NewEventService(sorobanClient *soroban.Client, logger *slog.Logger) *EventService {
-	return &EventService{
+	if sorobanClient == nil {
+		panic("NewEventService: sorobanClient must not be nil")
+	}
+	if logger == nil {
+		panic("NewEventService: logger must not be nil")
+	}
+
+	s := &EventService{
 		sorobanClient: sorobanClient,
 		logger:        logger,
-		cache:         make(map[string]eventCacheEntry),
 	}
+
+	s.cache = hot.NewHotCache[string, []TradeEvent](hot.LRU, eventCacheSize).
+		WithTTL(eventCacheTTL).
+		Build()
+
+	return s
 }
 
 // GetTradeEvents returns trade events for a contract, using cache when available.
 func (s *EventService) GetTradeEvents(ctx context.Context, contractID string) ([]TradeEvent, error) {
-	// Check cache
-	s.mu.RLock()
-	if entry, ok := s.cache[contractID]; ok && time.Since(entry.fetchedAt) < eventCacheTTL {
-		s.mu.RUnlock()
-		return entry.events, nil
+	cached, found, err := s.cache.Get(contractID)
+	if err != nil {
+		s.logger.Warn("event cache error, treating as miss", "contract_id", contractID, "error", err)
 	}
-	s.mu.RUnlock()
+	if found && err == nil {
+		return slices.Clone(cached), nil
+	}
 
-	// Fetch fresh events
 	events, err := s.fetchEvents(ctx, contractID)
 	if err != nil {
 		return nil, err
 	}
 
-	// Update cache
-	s.mu.Lock()
-	s.cache[contractID] = eventCacheEntry{events: events, fetchedAt: time.Now()}
-	s.mu.Unlock()
-
-	return events, nil
+	s.cache.Set(contractID, events)
+	return slices.Clone(events), nil
 }
 
 func (s *EventService) fetchEvents(ctx context.Context, contractID string) ([]TradeEvent, error) {
-	// Get latest ledger to compute start
 	latestLedger, err := s.sorobanClient.GetLatestLedger(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get latest ledger: %w", err)
@@ -85,7 +97,6 @@ func (s *EventService) fetchEvents(ctx context.Context, contractID string) ([]Tr
 		startLedger = latestLedger.Sequence - lookbackLedgers
 	}
 
-	// Encode topic filters for buy/sell symbols
 	buyTopicXDR, err := encodeSymbolBase64("buy")
 	if err != nil {
 		return nil, fmt.Errorf("failed to encode buy topic: %w", err)
@@ -122,16 +133,27 @@ func (s *EventService) fetchEvents(ctx context.Context, contractID string) ([]Tr
 	}
 
 	var events []TradeEvent
+	var parseErrors int
+	var lastParseErr error
+	successfulEvents := 0
 	for _, evt := range result.Events {
 		if !evt.InSuccessfulContractCall {
 			continue
 		}
+		successfulEvents++
 		parsed, err := s.parseTradeEvent(evt)
 		if err != nil {
-			s.logger.Debug("failed to parse trade event", "id", evt.ID, "error", err)
+			parseErrors++
+			lastParseErr = err
+			s.logger.Warn("failed to parse trade event", "id", evt.ID, "error", err)
 			continue
 		}
 		events = append(events, parsed)
+	}
+
+	// If all events failed to parse, return error (likely a schema mismatch)
+	if parseErrors > 0 && len(events) == 0 && successfulEvents > 0 {
+		return nil, fmt.Errorf("all %d events failed to parse: %w", parseErrors, lastParseErr)
 	}
 
 	return events, nil
@@ -150,7 +172,7 @@ func (s *EventService) parseTradeEvent(evt soroban.ContractEvent) (TradeEvent, e
 	if kindVal.Type != xdr.ScValTypeScvSymbol || kindVal.Sym == nil {
 		return TradeEvent{}, fmt.Errorf("expected symbol topic, got %v", kindVal.Type)
 	}
-	kind := string(*kindVal.Sym)
+	kind := TradeKind(string(*kindVal.Sym))
 
 	// Topic[1]: address (user)
 	userVal, err := soroban.ParseReturnValue(evt.Topic[1])
@@ -198,7 +220,6 @@ func (s *EventService) parseTradeEvent(evt soroban.ContractEvent) (TradeEvent, e
 		return TradeEvent{}, fmt.Errorf("failed to decode cost: %w", err)
 	}
 
-	// Parse timestamp
 	ts, err := time.Parse(time.RFC3339, evt.LedgerClosedAt)
 	if err != nil {
 		return TradeEvent{}, fmt.Errorf("failed to parse ledger close time %q: %w", evt.LedgerClosedAt, err)

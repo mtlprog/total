@@ -51,6 +51,12 @@
             </div>
             {{end}}
 
+            {{if .BalanceError}}
+            <div class="panel" style="text-align: center;">
+                <p style="font-size: 0.825rem; color: var(--no);">{{.BalanceError}}</p>
+            </div>
+            {{end}}
+
             {{if not .Market.IsResolved}}
             <div class="panel">
                 <form method="POST" action="/market/{{.Market.ID}}/buy">
