@@ -106,7 +106,7 @@ func (s *FactoryService) ListMarkets(ctx context.Context) ([]string, error) {
 
 	ids, found, err := s.marketListCache.Get("all")
 	if err != nil {
-		s.logger.Warn("market list cache error, fetching fresh", "error", err)
+		s.logger.Warn("market list cache revalidation error, serving stale data", "error", err)
 	}
 	if found {
 		return ids, nil

@@ -266,7 +266,10 @@
                     showEstimate(data.cost, true);
                 }
             })
-            .catch(function() {}); // Silently fall back to estimate
+            .catch(function(err) {
+                console.warn('Quote fetch failed:', err);
+                showQuickEstimate();
+            });
         }, 400);
     }
 

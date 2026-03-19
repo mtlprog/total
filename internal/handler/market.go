@@ -1150,12 +1150,16 @@ func mapContractError(errStr string) errorResponse {
 	case 1:
 		return errorResponse{"Contract is already initialized.", http.StatusConflict}
 	default:
+		if code < 0 {
+			return errorResponse{"Contract error occurred. Please try again.", http.StatusBadRequest}
+		}
 		return errorResponse{fmt.Sprintf("Contract error #%d occurred.", code), http.StatusBadRequest}
 	}
 }
 
-// extractLastErrorCode extracts the last (innermost) error code from a simulation error string.
-// Example: "...Error(Contract, #10)...Error(Contract, #7)..." returns 7.
+// extractLastErrorCode extracts the last Error(Contract, #N) code from a simulation error string.
+// When multiple codes appear (e.g., cross-contract calls), uses the last occurrence as a heuristic.
+// Returns -1 if no valid code found.
 func extractLastErrorCode(errStr string) int {
 	lastCode := -1
 	for i := 0; i < len(errStr); i++ {
@@ -1203,72 +1207,136 @@ func (h *MarketHandler) writeError(w http.ResponseWriter, r *http.Request, err e
 // handleAPIQuote returns a JSON price quote for the trade form.
 func (h *MarketHandler) handleAPIQuote(w http.ResponseWriter, r *http.Request) {
 	contractID := r.PathValue("id")
+	if contractID == "" {
+		writeJSONError(w, "contract ID required", http.StatusBadRequest)
+		return
+	}
+
 	outcomeStr := r.FormValue("outcome")
 	amountStr := r.FormValue("amount")
 
 	outcome, err := model.ParseOutcome(outcomeStr)
 	if err != nil {
-		http.Error(w, `{"error":"invalid outcome"}`, http.StatusBadRequest)
+		writeJSONError(w, "invalid outcome", http.StatusBadRequest)
 		return
 	}
 
 	amount, err := strconv.ParseFloat(amountStr, 64)
 	if err != nil || amount <= 0 {
-		http.Error(w, `{"error":"invalid amount"}`, http.StatusBadRequest)
+		writeJSONError(w, "invalid amount", http.StatusBadRequest)
 		return
 	}
 
 	quote, err := h.marketService.GetQuote(r.Context(), contractID, outcome, amount)
 	if err != nil {
-		h.logger.Warn("quote API error", "error", err)
-		http.Error(w, `{"error":"quote unavailable"}`, http.StatusBadGateway)
+		h.logger.Error("quote API error", "error", err, "contract_id", contractID, "outcome", outcomeStr, "amount", amountStr)
+		writeJSONError(w, "quote unavailable", http.StatusBadGateway)
 		return
 	}
 
 	costFloat := float64(quote.Cost) / float64(soroban.ScaleFactor)
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]any{
+	if err := json.NewEncoder(w).Encode(map[string]any{
 		"cost":        costFloat,
 		"price_after": quote.PriceAfter,
-	})
+	}); err != nil {
+		h.logger.Error("failed to encode quote response", "error", err)
+	}
 }
 
-const mtlWalletAPI = "https://eurmtl.me/remote/sep07/add"
+// writeJSONError writes a JSON error response with proper Content-Type.
+func writeJSONError(w http.ResponseWriter, msg string, status int) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(map[string]string{"error": msg})
+}
+
+const (
+	mtlWalletAPI    = "https://eurmtl.me/remote/sep07/add"
+	maxWalletURILen = 64 * 1024 // 64 KB max URI size
+)
+
+// mtlWalletClient is a dedicated HTTP client for the MTL Wallet API.
+// Does not follow redirects to prevent SSRF-adjacent issues.
+var mtlWalletClient = &http.Client{
+	Timeout: 10 * time.Second,
+	CheckRedirect: func(req *http.Request, via []*http.Request) error {
+		return http.ErrUseLastResponse
+	},
+}
 
 // handleMTLWallet proxies a Stellar URI to the MTL Wallet API (mainnet only).
 // Accepts form-encoded "uri" from frontend, forwards as JSON to eurmtl.me.
+// Validates upstream response is JSON with an https:// URL before forwarding.
 func (h *MarketHandler) handleMTLWallet(w http.ResponseWriter, r *http.Request) {
 	if strings.Contains(h.networkPassphrase, "Test") {
-		http.Error(w, "MTL Wallet is only available on mainnet", http.StatusBadRequest)
+		writeJSONError(w, "MTL Wallet is only available on mainnet", http.StatusBadRequest)
 		return
 	}
 
 	uri := r.FormValue("uri")
 	if uri == "" || !strings.HasPrefix(uri, "web+stellar:tx?") {
-		http.Error(w, "Invalid Stellar URI", http.StatusBadRequest)
+		writeJSONError(w, "invalid Stellar URI", http.StatusBadRequest)
+		return
+	}
+	if len(uri) > maxWalletURILen {
+		writeJSONError(w, "URI too large", http.StatusBadRequest)
 		return
 	}
 
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
 
-	jsonBody, _ := json.Marshal(map[string]string{"uri": uri})
+	jsonBody, err := json.Marshal(map[string]string{"uri": uri})
+	if err != nil {
+		h.logger.Error("failed to marshal MTL Wallet request", "error", err)
+		writeJSONError(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, mtlWalletAPI, bytes.NewReader(jsonBody))
 	if err != nil {
-		http.Error(w, "Failed to create request", http.StatusInternalServerError)
+		writeJSONError(w, "internal error", http.StatusInternalServerError)
 		return
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := mtlWalletClient.Do(req)
 	if err != nil {
 		h.logger.Warn("MTL Wallet API unreachable", "error", err)
-		http.Error(w, "MTL Wallet is temporarily unavailable", http.StatusBadGateway)
+		writeJSONError(w, "MTL Wallet is temporarily unavailable", http.StatusBadGateway)
 		return
 	}
 	defer resp.Body.Close()
 
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<16)) // 64 KB max response
+	if err != nil {
+		h.logger.Error("failed to read MTL Wallet response", "error", err)
+		writeJSONError(w, "failed to read wallet response", http.StatusBadGateway)
+		return
+	}
+
+	if resp.StatusCode >= 400 {
+		h.logger.Warn("MTL Wallet API error", "status", resp.StatusCode, "body", string(body))
+		writeJSONError(w, "MTL Wallet returned an error", http.StatusBadGateway)
+		return
+	}
+
+	// Validate response is JSON with a safe URL
+	var walletResp struct {
+		URL string `json:"url"`
+	}
+	if err := json.Unmarshal(body, &walletResp); err != nil {
+		h.logger.Error("MTL Wallet returned non-JSON", "body_prefix", string(body[:min(len(body), 200)]))
+		writeJSONError(w, "unexpected wallet response", http.StatusBadGateway)
+		return
+	}
+	if walletResp.URL != "" && !strings.HasPrefix(walletResp.URL, "https://") {
+		h.logger.Warn("MTL Wallet returned non-https URL", "url", walletResp.URL)
+		writeJSONError(w, "unexpected wallet response", http.StatusBadGateway)
+		return
+	}
+
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(resp.StatusCode)
-	io.Copy(w, resp.Body)
+	w.Write(body)
 }

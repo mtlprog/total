@@ -92,7 +92,7 @@
             return r.json();
         })
         .then(function(data) {
-            if (data.url) {
+            if (data.url && data.url.indexOf('https://') === 0) {
                 window.open(data.url, '_blank');
             } else {
                 alert('MTL Wallet returned an unexpected response. Use Stellar Lab instead.');
