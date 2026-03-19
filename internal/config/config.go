@@ -5,7 +5,7 @@ const (
 
 	// Mainnet configuration
 	MainnetHorizonURL        = "https://horizon.stellar.org"
-	MainnetSorobanRPCURL     = "https://soroban-rpc.stellar.org:443"
+	MainnetSorobanRPCURL     = "https://mainnet.sorobanrpc.com"
 	MainnetNetworkPassphrase = "Public Global Stellar Network ; September 2015"
 
 	// Testnet configuration
