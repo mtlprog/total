@@ -9,9 +9,16 @@ Stellar prediction market platform. Stateless web application that builds Soroba
 ## Commands
 
 - `make build` - Build for local macOS
+- `make build-linux` - Build for Linux (Docker containers)
 - `PORT=9090 make run` - Run locally on port 9090 (env vars inline, fish-compatible)
+- `make dev` - Build Linux binary + start Docker dev environment
+- `make dev-restart` - Rebuild + restart containers after code changes
+- `make dev-logs` - Tail Docker container logs
+- `make dev-down` - Stop Docker dev environment
 - `make test` - Run tests
+- `make test-short` - Run short tests only
 - `make lint` - Format and vet code
+- `make clean` - Remove binary + tear down Docker volumes
 - `cd contracts && cargo test` - Run Soroban contract tests
 - `cd contracts && cargo build --release --target wasm32-unknown-unknown` - Build Soroban WASM
 - `rustup default stable` - Required before cargo commands on fresh Rust install
@@ -102,7 +109,10 @@ The IPFS CID (hash) is stored on-chain via `metadata_hash` parameter.
 - `PINATA_API_KEY` - Pinata API key for IPFS metadata storage (optional)
 - `PINATA_API_SECRET` - Pinata API secret for IPFS metadata storage (optional)
 - `PORT` - HTTP server port (default: 8080)
+- `MARKET_IDS` - Comma-separated list of known market IDs (docker-compose only, optional)
 - `LOG_LEVEL` - Log level: debug, info, warn, error (default: info)
+
+App loads `.env` file automatically via `godotenv` if present (ignored in production).
 
 ## Gotchas
 
@@ -192,23 +202,4 @@ Examples:
 
 ## Soroban Contract Functions
 
-### LMSRMarket Contract
-- `initialize(oracle, collateral_token, liquidity_param, metadata_hash, initial_funding)` - Set up market
-- `buy(user, outcome, amount, max_cost)` - Buy tokens, returns actual cost
-- `sell(user, outcome, amount, min_return)` - Sell tokens, returns actual return
-- `resolve(oracle, winning_outcome)` - Oracle resolves market
-- `claim(user)` - Claim winnings after resolution (2% fee deducted, stays in pool)
-- `withdraw_remaining(oracle)` - Withdraw leftover pool after resolution (oracle only)
-- `get_price(outcome)` - Get current price (0-SCALE_FACTOR)
-- `get_quote(outcome, amount)` - Get buy quote (cost, price_after)
-- `get_sell_quote(outcome, amount)` - Get sell quote (return_amount, price_after)
-- `get_balance(user, outcome)` - Get user's token balance
-- `get_state()` - Get (yes_sold, no_sold, pool, resolved)
-- `get_metadata_hash()` - Get IPFS CID for market metadata JSON
-- `get_collateral_token()` - Get collateral token address
-
-### MarketFactory Contract
-- `initialize(admin, market_wasm_hash, default_collateral_token)` - Set up factory
-- `deploy_market(oracle, liquidity_param, metadata_hash, initial_funding, salt)` - Deploy new market
-- `list_markets()` - Get all deployed market addresses
-- `market_count()` - Get number of markets
+See `contracts/lmsr_market/src/lib.rs` and `contracts/market_factory/` for contract API details.
