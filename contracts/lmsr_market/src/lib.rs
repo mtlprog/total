@@ -322,8 +322,10 @@ impl LmsrMarket {
         let token_client = token::Client::new(&env, &collateral_token);
         token_client.transfer(&env.current_contract_address(), &user, &return_amount);
 
-        env.events()
-            .publish((symbol_short!("sell"), user, outcome), (amount, return_amount));
+        env.events().publish(
+            (symbol_short!("sell"), user, outcome),
+            (amount, return_amount),
+        );
 
         Ok(return_amount)
     }
