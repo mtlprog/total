@@ -83,8 +83,10 @@
                         <div class="price-item-value no">{{printf "%.2f" .UserBalance.NoBalance}}</div>
                     </div>
                 </div>
+                {{else if .BalanceError}}
+                <p style="font-size: 0.825rem; color: var(--no);">{{.BalanceError}}</p>
                 {{else if .AccountKey}}
-                <p style="font-size: 0.825rem; color: var(--text-2);">No position found or failed to load balance.</p>
+                <p style="font-size: 0.825rem; color: var(--text-2);">No position in this market.</p>
                 {{end}}
             </div>
 

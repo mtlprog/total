@@ -358,6 +358,7 @@ func (s *MarketService) BuildWithdrawTx(ctx context.Context, req WithdrawRequest
 }
 
 // UserBalance represents a user's YES and NO token balances in a market.
+// Balances are in human-readable units (already divided by ScaleFactor).
 type UserBalance struct {
 	YesBalance float64
 	NoBalance  float64
@@ -368,24 +369,46 @@ func (s *MarketService) GetBalance(ctx context.Context, contractID string, accou
 	if err := soroban.ValidateContractID(contractID); err != nil {
 		return nil, fmt.Errorf("invalid contract ID: %w", err)
 	}
-
-	yesBalance, err := s.getOutcomeBalance(ctx, contractID, account, soroban.OutcomeYes)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get YES balance: %w", err)
+	if err := model.ValidateStellarPublicKey(account); err != nil {
+		return nil, fmt.Errorf("invalid account: %w", err)
 	}
 
-	noBalance, err := s.getOutcomeBalance(ctx, contractID, account, soroban.OutcomeNo)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get NO balance: %w", err)
+	type result struct {
+		balance int64
+		err     error
+	}
+
+	yesCh := make(chan result, 1)
+	noCh := make(chan result, 1)
+
+	go func() {
+		b, err := s.getOutcomeBalance(ctx, contractID, account, soroban.OutcomeYes)
+		yesCh <- result{b, err}
+	}()
+	go func() {
+		b, err := s.getOutcomeBalance(ctx, contractID, account, soroban.OutcomeNo)
+		noCh <- result{b, err}
+	}()
+
+	yesRes := <-yesCh
+	if yesRes.err != nil {
+		return nil, fmt.Errorf("failed to get YES balance: %w", yesRes.err)
+	}
+
+	noRes := <-noCh
+	if noRes.err != nil {
+		return nil, fmt.Errorf("failed to get NO balance: %w", noRes.err)
 	}
 
 	return &UserBalance{
-		YesBalance: float64(yesBalance) / float64(soroban.ScaleFactor),
-		NoBalance:  float64(noBalance) / float64(soroban.ScaleFactor),
+		YesBalance: float64(yesRes.balance) / float64(soroban.ScaleFactor),
+		NoBalance:  float64(noRes.balance) / float64(soroban.ScaleFactor),
 	}, nil
 }
 
-// getOutcomeBalance gets balance for a single outcome.
+// getOutcomeBalance queries a user's balance for a single outcome by simulating
+// a get_balance() contract call. Returns the raw scaled balance (divide by ScaleFactor
+// for display). Returns 0 if the user has no position.
 func (s *MarketService) getOutcomeBalance(ctx context.Context, contractID string, account string, outcome uint32) (int64, error) {
 	txXDR, err := s.txBuilder.BuildGetBalanceTx(ctx, stellar.GetBalanceTxParams{
 		UserPublicKey: s.oraclePublicKey,
@@ -402,10 +425,7 @@ func (s *MarketService) getOutcomeBalance(ctx context.Context, contractID string
 		return 0, fmt.Errorf("failed to simulate get_balance: %w", err)
 	}
 
-	if simResult.Error != "" {
-		return 0, fmt.Errorf("simulation error: %s", simResult.Error)
-	}
-
+	// Empty results means the user has no position (never traded in this market).
 	if len(simResult.Results) == 0 || simResult.Results[0].XDR == "" {
 		return 0, nil
 	}

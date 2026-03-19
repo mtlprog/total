@@ -285,7 +285,7 @@ func (b *Builder) BuildGetSellQuoteTx(ctx context.Context, params GetQuoteTxPara
 
 // GetBalanceTxParams contains parameters for getting a user's token balance.
 type GetBalanceTxParams struct {
-	UserPublicKey string
+	UserPublicKey string // Source account for simulation (any funded account)
 	ContractID    string
 	Account       string // Address to check balance for
 	Outcome       uint32 // 0 for YES, 1 for NO
