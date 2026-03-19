@@ -58,29 +58,7 @@
             {{end}}
 
             {{if not .Market.IsResolved}}
-            <div class="panel">
-                <form method="POST" action="/market/{{.Market.ID}}/buy">
-                    <input type="hidden" name="outcome" value="{{.Outcome}}">
-                    {{if .AccountID}}
-                    <input type="hidden" name="user_public_key" value="{{.AccountID}}">
-                    {{else}}
-                    <div class="form-group">
-                        <label class="form-label">Your Stellar Public Key</label>
-                        <input class="form-input" type="text" name="user_public_key" placeholder="G..." required pattern="G[A-Z2-7]{55}">
-                    </div>
-                    {{end}}
-                    <div class="trade-form">
-                        <div class="form-group">
-                            <label class="form-label">Amount</label>
-                            <input class="form-input" type="number" name="amount" min="0.01" step="0.01" value="10" required>
-                        </div>
-                        <div class="trade-actions">
-                            <button type="submit" class="btn {{if eq .Outcome "YES"}}btn-yes{{else}}btn-no{{end}}" formaction="/market/{{.Market.ID}}/buy">BUY</button>
-                            <button type="submit" class="btn" formaction="/market/{{.Market.ID}}/sell">SELL</button>
-                        </div>
-                    </div>
-                </form>
-            </div>
+            {{template "trade-form" .}}
             {{else}}
             <div class="resolved-banner {{if eq .Market.Resolution.String "YES"}}yes{{else}}no{{end}}">
                 Market Resolved — {{.Market.Resolution}} Wins

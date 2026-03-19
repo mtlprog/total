@@ -53,33 +53,7 @@
                 <div class="prob-bar-no"></div>
             </div>
 
-            <!-- Trade Form -->
-            <div class="panel">
-                <form id="trade-form" method="POST" action="/market/{{.Market.ID}}/buy">
-                    <input type="hidden" name="outcome" id="outcome-input" value="YES">
-                    <div class="trade-selected-label" id="trade-selected-label">▶ YES</div>
-                    {{if .AccountID}}
-                    <input type="hidden" name="user_public_key" value="{{.AccountID}}">
-                    {{else}}
-                    <div class="form-group" style="margin-bottom: 1rem;">
-                        <label class="form-label">Your Stellar Public Key</label>
-                        <input class="form-input" type="text" name="user_public_key" placeholder="G..." required pattern="G[A-Z2-7]{55}">
-                    </div>
-                    {{end}}
-                    <div class="trade-form">
-                        <div class="form-group">
-                            <label class="form-label">Tokens</label>
-                            <input class="form-input" type="number" name="amount" id="trade-amount" min="0.01" step="0.01" value="1" required oninput="fetchQuote()">
-                        </div>
-                        <div class="trade-actions">
-                            <button type="submit" class="btn btn-yes" formaction="/market/{{.Market.ID}}/buy">BUY</button>
-                            <button type="submit" class="btn btn-no" formaction="/market/{{.Market.ID}}/sell">SELL</button>
-                        </div>
-                    </div>
-                    <div class="trade-estimate" id="trade-estimate">≈ {{printf "%.2f" .Market.PriceYes}} EURMTL</div>
-                    <div class="trade-hint">Cost from contract quote. Slippage protection: 1%.</div>
-                </form>
-            </div>
+            {{template "trade-form" .}}
             {{else}}
             <!-- Resolved: show final prices and claim -->
             <div class="panel">
@@ -217,10 +191,6 @@
 
     {{if not .Market.IsResolved}}
     <script>
-    var prices = { YES: {{.Market.PriceYes}}, NO: {{.Market.PriceNo}} };
-    var marketID = {{.Market.ID}};
-    var quoteTimer = null;
-
     function selectOutcome(card) {
         document.querySelectorAll('.outcome-card').forEach(function(c) { c.classList.remove('selected'); });
         card.classList.add('selected');
@@ -232,51 +202,6 @@
         document.getElementById('trade-selected-label').textContent = '\u25b6 ' + outcome;
         fetchQuote();
     }
-
-    function showEstimate(cost, exact) {
-        var el = document.getElementById('trade-estimate');
-        var prefix = exact ? '' : '\u2248 ';
-        el.textContent = prefix + cost.toFixed(2) + ' EURMTL';
-    }
-
-    function showQuickEstimate() {
-        var amount = parseFloat(document.getElementById('trade-amount').value) || 0;
-        var outcome = document.getElementById('outcome-input').value;
-        showEstimate(amount * (prices[outcome] || 0.5), false);
-    }
-
-    function fetchQuote() {
-        var amount = parseFloat(document.getElementById('trade-amount').value) || 0;
-        var outcome = document.getElementById('outcome-input').value;
-        if (amount <= 0) { showEstimate(0, false); return; }
-
-        // Show instant estimate while loading
-        showQuickEstimate();
-
-        // Debounce RPC call
-        if (quoteTimer) clearTimeout(quoteTimer);
-        quoteTimer = setTimeout(function() {
-            var body = new URLSearchParams();
-            body.append('outcome', outcome);
-            body.append('amount', amount.toString());
-            fetch('/api/quote/' + marketID, { method: 'POST', body: body })
-            .then(function(r) { return r.ok ? r.json() : null; })
-            .then(function(data) {
-                if (data && data.cost !== undefined) {
-                    showEstimate(data.cost, true);
-                }
-            })
-            .catch(function(err) {
-                console.warn('Quote fetch failed:', err);
-                showQuickEstimate();
-            });
-        }, 400);
-    }
-
-    document.addEventListener('DOMContentLoaded', function() {
-        var form = document.getElementById('trade-form');
-        if (form) { form.classList.add('outcome-yes'); fetchQuote(); }
-    });
     </script>
     {{end}}
 </body>
