@@ -1,7 +1,7 @@
 {{define "styles"}}
 <!-- Theme init: runs sync before CSS to prevent FOUC. Must stay in <head> before <style>. -->
 <script>
-(function(){var t,mq;try{t=localStorage.getItem('theme')}catch(e){console.warn('[Total] localStorage unavailable:',e)}mq=typeof matchMedia==='function'&&matchMedia('(prefers-color-scheme:dark)');document.documentElement.dataset.theme=t||(mq&&mq.matches?'dark':'light')})();
+(function(){var t,mq;try{t=localStorage.getItem('theme')}catch(e){console.warn('[MTL Predict] localStorage unavailable:',e)}mq=typeof matchMedia==='function'&&matchMedia('(prefers-color-scheme:dark)');document.documentElement.dataset.theme=t||(mq&&mq.matches?'dark':'light')})();
 </script>
 <style>
     /* ─── DARK THEME (poimandres) — default ─── */
@@ -891,7 +891,7 @@
 
 {{define "header"}}
 <header class="header">
-    <a href="/" class="header-brand">Total</a>
+    <a href="/" class="header-brand">MTL Predict</a>
     <div class="header-right">
         {{if .AccountID}}
         <span class="account-chip" id="account-display">
@@ -904,7 +904,7 @@
             <button type="button" class="account-chip-edit" onclick="document.getElementById('account-edit').style.display='none';document.getElementById('account-display').style.display='inline-flex';">cancel</button>
         </form>
         {{end}}
-        <button class="theme-toggle" onclick="(function(){var h=document.documentElement,n=h.dataset.theme==='dark'?'light':'dark';h.dataset.theme=n;try{localStorage.setItem('theme',n)}catch(e){console.warn('[Total] Cannot save theme:',e)}})()" aria-label="Toggle light/dark theme">
+        <button class="theme-toggle" onclick="(function(){var h=document.documentElement,n=h.dataset.theme==='dark'?'light':'dark';h.dataset.theme=n;try{localStorage.setItem('theme',n)}catch(e){console.warn('[MTL Predict] Cannot save theme:',e)}})()" aria-label="Toggle light/dark theme">
             <svg class="theme-icon theme-icon-sun" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>
             </svg>
@@ -934,12 +934,10 @@
 <footer class="footer">
     <div class="footer-inner">
         <div class="footer-links">
-            <a href="https://stellar.org" target="_blank" rel="noopener">Stellar</a>
-            <a href="https://soroban.stellar.org" target="_blank" rel="noopener">Soroban</a>
-            <a href="https://lab.stellar.org" target="_blank" rel="noopener">Lab</a>
             <a href="https://github.com/mtlprog/total" target="_blank" rel="noopener">GitHub</a>
+            <a href="https://montelibero.org" target="_blank" rel="noopener">Montelibero</a>
         </div>
-        <span class="footer-tag">LMSR Prediction Markets on Stellar</span>
+        <span class="footer-tag">Montelibero Prediction Markets</span>
     </div>
 </footer>
 {{end}}
