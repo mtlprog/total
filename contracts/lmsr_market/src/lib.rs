@@ -5,7 +5,7 @@ mod lmsr;
 mod storage;
 
 use error::MarketError;
-use soroban_sdk::{contract, contractimpl, token, Address, Env, String};
+use soroban_sdk::{contract, contractimpl, symbol_short, token, Address, Env, String};
 #[cfg(test)]
 use storage::SCALE_FACTOR;
 use storage::{is_valid_outcome, DataKey, BPS_DENOMINATOR, CLAIM_FEE_BPS, OUTCOME_YES};
@@ -213,6 +213,9 @@ impl LmsrMarket {
             .instance()
             .set(&balance_key, &(current_balance + amount));
 
+        env.events()
+            .publish((symbol_short!("buy"), user, outcome), (amount, cost));
+
         Ok(cost)
     }
 
@@ -319,6 +322,9 @@ impl LmsrMarket {
         let token_client = token::Client::new(&env, &collateral_token);
         token_client.transfer(&env.current_contract_address(), &user, &return_amount);
 
+        env.events()
+            .publish((symbol_short!("sell"), user, outcome), (amount, return_amount));
+
         Ok(return_amount)
     }
 
@@ -367,6 +373,9 @@ impl LmsrMarket {
         env.storage()
             .instance()
             .set(&DataKey::UnclaimedWinningTokens, &winning_tokens);
+
+        env.events()
+            .publish((symbol_short!("resolve"), oracle), winning_outcome);
 
         Ok(())
     }
@@ -456,6 +465,9 @@ impl LmsrMarket {
         let token_client = token::Client::new(&env, &collateral_token);
         token_client.transfer(&env.current_contract_address(), &user, &user_payout);
 
+        env.events()
+            .publish((symbol_short!("claim"), user), user_payout);
+
         Ok(user_payout)
     }
 
@@ -525,6 +537,9 @@ impl LmsrMarket {
             .ok_or(MarketError::StorageCorrupted)?;
         let token_client = token::Client::new(&env, &collateral_token);
         token_client.transfer(&env.current_contract_address(), &oracle, &withdrawable);
+
+        env.events()
+            .publish((symbol_short!("withdraw"), oracle), withdrawable);
 
         Ok(withdrawable)
     }

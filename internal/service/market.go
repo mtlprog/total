@@ -357,6 +357,72 @@ func (s *MarketService) BuildWithdrawTx(ctx context.Context, req WithdrawRequest
 	}, nil
 }
 
+// UserBalance represents a user's YES and NO token balances in a market.
+type UserBalance struct {
+	YesBalance float64
+	NoBalance  float64
+}
+
+// GetBalance gets a user's YES and NO token balances from a market contract.
+func (s *MarketService) GetBalance(ctx context.Context, contractID string, account string) (*UserBalance, error) {
+	if err := soroban.ValidateContractID(contractID); err != nil {
+		return nil, fmt.Errorf("invalid contract ID: %w", err)
+	}
+
+	yesBalance, err := s.getOutcomeBalance(ctx, contractID, account, soroban.OutcomeYes)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get YES balance: %w", err)
+	}
+
+	noBalance, err := s.getOutcomeBalance(ctx, contractID, account, soroban.OutcomeNo)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get NO balance: %w", err)
+	}
+
+	return &UserBalance{
+		YesBalance: float64(yesBalance) / float64(soroban.ScaleFactor),
+		NoBalance:  float64(noBalance) / float64(soroban.ScaleFactor),
+	}, nil
+}
+
+// getOutcomeBalance gets balance for a single outcome.
+func (s *MarketService) getOutcomeBalance(ctx context.Context, contractID string, account string, outcome uint32) (int64, error) {
+	txXDR, err := s.txBuilder.BuildGetBalanceTx(ctx, stellar.GetBalanceTxParams{
+		UserPublicKey: s.oraclePublicKey,
+		ContractID:    contractID,
+		Account:       account,
+		Outcome:       outcome,
+	})
+	if err != nil {
+		return 0, fmt.Errorf("failed to build get_balance tx: %w", err)
+	}
+
+	simResult, err := s.sorobanClient.SimulateTransaction(ctx, txXDR)
+	if err != nil {
+		return 0, fmt.Errorf("failed to simulate get_balance: %w", err)
+	}
+
+	if simResult.Error != "" {
+		return 0, fmt.Errorf("simulation error: %s", simResult.Error)
+	}
+
+	if len(simResult.Results) == 0 || simResult.Results[0].XDR == "" {
+		return 0, nil
+	}
+
+	returnVal, err := soroban.ParseReturnValue(simResult.Results[0].XDR)
+	if err != nil {
+		return 0, fmt.Errorf("failed to parse return value: %w", err)
+	}
+
+	balance, err := soroban.DecodeI128(returnVal)
+	if err != nil {
+		return 0, fmt.Errorf("failed to decode balance: %w", err)
+	}
+
+	return balance, nil
+}
+
 // Quote represents a price quote for buying from the contract.
 type Quote struct {
 	Cost       int64   // Scaled by 10^7

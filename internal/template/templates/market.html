@@ -61,6 +61,33 @@
             </div>
             {{end}}
 
+            <div class="panel">
+                <h3 class="panel-title">Your Position</h3>
+                <form method="GET" action="/market/{{.Market.ID}}" style="margin-bottom: 1rem;">
+                    <div class="form-group" style="margin-bottom: 0.75rem;">
+                        <label class="form-label">Stellar Public Key</label>
+                        <div style="display: flex; gap: 0.5rem;">
+                            <input class="form-input" type="text" name="account" placeholder="G..." value="{{.AccountKey}}" pattern="G[A-Z2-7]{55}" style="flex: 1;">
+                            <button type="submit" class="btn" style="white-space: nowrap;">Check</button>
+                        </div>
+                    </div>
+                </form>
+                {{if .UserBalance}}
+                <div class="price-display">
+                    <div class="price-item">
+                        <div class="price-item-label">Yes tokens</div>
+                        <div class="price-item-value yes">{{printf "%.2f" .UserBalance.YesBalance}}</div>
+                    </div>
+                    <div class="price-item">
+                        <div class="price-item-label">No tokens</div>
+                        <div class="price-item-value no">{{printf "%.2f" .UserBalance.NoBalance}}</div>
+                    </div>
+                </div>
+                {{else if .AccountKey}}
+                <p style="font-size: 0.825rem; color: var(--text-2);">No position found or failed to load balance.</p>
+                {{end}}
+            </div>
+
             {{if not .Market.IsResolved}}
             <div class="trade-grid">
                 <div class="panel">
