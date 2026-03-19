@@ -33,8 +33,58 @@
             </div>
             {{end}}
 
+            {{if not .Market.IsResolved}}
+            <!-- YES / NO Outcome Cards -->
+            <div class="outcome-cards">
+                <div class="outcome-card yes selected" data-outcome="YES" onclick="selectOutcome(this)">
+                    <div class="outcome-card-label">Yes</div>
+                    <div class="outcome-card-price">{{printf "%.0f" (mul .Market.PriceYes 100)}}%</div>
+                    {{if .UserBalance}}
+                    <div class="outcome-card-balance">{{printf "%.2f" .UserBalance.YesBalance}} tokens</div>
+                    {{end}}
+                </div>
+                <div class="outcome-card no" data-outcome="NO" onclick="selectOutcome(this)">
+                    <div class="outcome-card-label">No</div>
+                    <div class="outcome-card-price">{{printf "%.0f" (mul .Market.PriceNo 100)}}%</div>
+                    {{if .UserBalance}}
+                    <div class="outcome-card-balance">{{printf "%.2f" .UserBalance.NoBalance}} tokens</div>
+                    {{end}}
+                </div>
+            </div>
+
+            <div class="prob-bar" style="height: 3px; margin-bottom: 1.5rem;">
+                <div class="prob-bar-yes" style="width: {{printf "%.1f" (mul .Market.PriceYes 100)}}%"></div>
+                <div class="prob-bar-no"></div>
+            </div>
+
+            <!-- Trade Form -->
             <div class="panel">
-                <h3 class="panel-title">Current Prices</h3>
+                <form id="trade-form" method="POST" action="/market/{{.Market.ID}}/buy">
+                    <input type="hidden" name="outcome" id="outcome-input" value="YES">
+                    {{if .AccountID}}
+                    <input type="hidden" name="user_public_key" value="{{.AccountID}}">
+                    {{else}}
+                    <div class="form-group" style="margin-bottom: 1rem;">
+                        <label class="form-label">Your Stellar Public Key</label>
+                        <input class="form-input" type="text" name="user_public_key" placeholder="G..." required pattern="G[A-Z2-7]{55}">
+                    </div>
+                    {{end}}
+                    <div class="trade-form">
+                        <div class="form-group">
+                            <label class="form-label">Amount</label>
+                            <input class="form-input" type="number" name="amount" min="0.01" step="0.01" value="10" required>
+                        </div>
+                        <div class="trade-actions">
+                            <button type="submit" class="btn btn-yes" formaction="/market/{{.Market.ID}}/buy">BUY</button>
+                            <button type="submit" class="btn btn-no" formaction="/market/{{.Market.ID}}/sell">SELL</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            {{else}}
+            <!-- Resolved: show final prices and claim -->
+            <div class="panel">
+                <h3 class="panel-title">Final Prices</h3>
                 <div class="price-display">
                     <div class="price-item">
                         <div class="price-item-label">Yes</div>
@@ -45,34 +95,11 @@
                         <div class="price-item-value no">{{printf "%.1f" (mul .Market.PriceNo 100)}}%</div>
                     </div>
                 </div>
-                <div class="prob-bar" style="height: 3px; margin-bottom: 0;">
-                    <div class="prob-bar-yes" style="width: {{printf "%.1f" (mul .Market.PriceYes 100)}}%"></div>
-                    <div class="prob-bar-no"></div>
-                </div>
-                {{if .BarChart}}
-                <pre class="bar-chart" style="margin-top: 1.25rem;">{{.BarChart}}</pre>
-                {{end}}
             </div>
 
-            {{if .PriceChart}}
-            <div class="panel">
-                <h3 class="panel-title">Price History</h3>
-                <pre style="font-size: 0.72rem; line-height: 1.3; border: none; padding: 0; background: none; color: var(--text-2);">{{.PriceChart}}</pre>
-            </div>
-            {{end}}
-
+            {{if .UserBalance}}
             <div class="panel">
                 <h3 class="panel-title">Your Position</h3>
-                <form method="GET" action="/market/{{.Market.ID}}" style="margin-bottom: 1rem;">
-                    <div class="form-group" style="margin-bottom: 0.75rem;">
-                        <label class="form-label">Stellar Public Key</label>
-                        <div style="display: flex; gap: 0.5rem;">
-                            <input class="form-input" type="text" name="account" placeholder="G..." value="{{.AccountKey}}" pattern="G[A-Z2-7]{55}" style="flex: 1;">
-                            <button type="submit" class="btn" style="white-space: nowrap;">Check</button>
-                        </div>
-                    </div>
-                </form>
-                {{if .UserBalance}}
                 <div class="price-display">
                     <div class="price-item">
                         <div class="price-item-label">Yes tokens</div>
@@ -83,84 +110,51 @@
                         <div class="price-item-value no">{{printf "%.2f" .UserBalance.NoBalance}}</div>
                     </div>
                 </div>
-                {{else if .BalanceError}}
-                <p style="font-size: 0.825rem; color: var(--no);">{{.BalanceError}}</p>
-                {{else if .AccountKey}}
-                <p style="font-size: 0.825rem; color: var(--text-2);">No position in this market.</p>
-                {{end}}
             </div>
+            {{end}}
 
-            {{if not .Market.IsResolved}}
-            <div class="trade-grid">
-                <div class="panel">
-                    <h3 class="panel-title">Buy Tokens</h3>
-                    <form method="POST" action="/market/{{.Market.ID}}/buy">
-                        <div class="form-group">
-                            <label class="form-label">Your Stellar Public Key</label>
-                            <input class="form-input" type="text" name="user_public_key" placeholder="G..." required pattern="G[A-Z2-7]{55}">
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">Outcome</label>
-                            <div class="outcome-group">
-                                <div class="outcome-option yes">
-                                    <input type="radio" name="outcome" value="YES" id="buy-yes" required>
-                                    <label for="buy-yes">Yes</label>
-                                </div>
-                                <div class="outcome-option no">
-                                    <input type="radio" name="outcome" value="NO" id="buy-no">
-                                    <label for="buy-no">No</label>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">Amount (tokens)</label>
-                            <input class="form-input" type="number" name="amount" min="0.01" step="0.01" value="10" required>
-                        </div>
-                        <button type="submit" class="btn btn-primary">Get Buy Transaction</button>
-                    </form>
-                </div>
-
-                <div class="panel">
-                    <h3 class="panel-title">Sell Tokens</h3>
-                    <form method="POST" action="/market/{{.Market.ID}}/sell">
-                        <div class="form-group">
-                            <label class="form-label">Your Stellar Public Key</label>
-                            <input class="form-input" type="text" name="user_public_key" placeholder="G..." required pattern="G[A-Z2-7]{55}">
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">Outcome</label>
-                            <div class="outcome-group">
-                                <div class="outcome-option yes">
-                                    <input type="radio" name="outcome" value="YES" id="sell-yes" required>
-                                    <label for="sell-yes">Yes</label>
-                                </div>
-                                <div class="outcome-option no">
-                                    <input type="radio" name="outcome" value="NO" id="sell-no">
-                                    <label for="sell-no">No</label>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">Amount (tokens to sell)</label>
-                            <input class="form-input" type="number" name="amount" min="0.01" step="0.01" value="10" required>
-                        </div>
-                        <button type="submit" class="btn">Get Sell Transaction</button>
-                    </form>
-                </div>
-            </div>
-            {{else}}
             <div class="panel">
                 <h3 class="panel-title">Claim Winnings</h3>
                 <p style="font-size: 0.825rem; color: var(--text-2); margin-bottom: 1.25rem;">
                     If you hold winning {{.Market.Resolution}} tokens, claim your collateral below.
                 </p>
                 <form method="POST" action="/market/{{.Market.ID}}/claim">
+                    {{if .AccountID}}
+                    <input type="hidden" name="user_public_key" value="{{.AccountID}}">
+                    {{else}}
                     <div class="form-group">
                         <label class="form-label">Your Stellar Public Key</label>
                         <input class="form-input" type="text" name="user_public_key" placeholder="G..." required pattern="G[A-Z2-7]{55}">
                     </div>
-                    <button type="submit" class="btn btn-yes">Get Claim Transaction</button>
+                    {{end}}
+                    <button type="submit" class="btn btn-yes">Claim</button>
                 </form>
+            </div>
+            {{end}}
+
+            {{if .BalanceError}}
+            <div class="panel">
+                <p style="font-size: 0.825rem; color: var(--no);">{{.BalanceError}}</p>
+            </div>
+            {{end}}
+
+            {{if .PriceChart}}
+            <div class="panel">
+                <h3 class="panel-title">Price History</h3>
+                <pre style="font-size: 0.72rem; line-height: 1.3; border: none; padding: 0; background: none; color: var(--text-2);">{{.PriceChart}}</pre>
+            </div>
+            {{end}}
+
+            {{if .TradeEvents}}
+            <div class="panel">
+                <h3 class="panel-title">Trade History</h3>
+                {{range .TradeEvents}}
+                <div class="trade-event">
+                    <span class="trade-event-kind {{.Kind}}">{{.Kind}}</span>
+                    <span class="trade-event-detail">{{printf "%.1f" .Amount}} {{.Outcome}}</span>
+                    <span class="trade-event-cost">{{printf "%.2f" .Cost}}</span>
+                </div>
+                {{end}}
             </div>
             {{end}}
 
@@ -192,10 +186,6 @@
                     <span class="meta-key">Volume NO</span>
                     <span class="meta-val">{{printf "%.2f" .Market.NoSold}} tokens</span>
                 </div>
-                <div class="meta-row">
-                    <span class="meta-key">Liquidity (b)</span>
-                    <span class="meta-val">{{printf "%.0f" .Market.LiquidityParam}}</span>
-                </div>
                 {{if not .Market.CreatedAt.IsZero}}
                 <div class="meta-row">
                     <span class="meta-key">Created</span>
@@ -219,5 +209,15 @@
         </main>
     </div>
     {{template "footer" .}}
+
+    {{if not .Market.IsResolved}}
+    <script>
+    function selectOutcome(card) {
+        document.querySelectorAll('.outcome-card').forEach(function(c) { c.classList.remove('selected'); });
+        card.classList.add('selected');
+        document.getElementById('outcome-input').value = card.dataset.outcome;
+    }
+    </script>
+    {{end}}
 </body>
 </html>

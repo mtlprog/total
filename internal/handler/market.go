@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
 
+	"github.com/mtlprog/total/internal/chart"
 	"github.com/mtlprog/total/internal/ipfs"
 	"github.com/mtlprog/total/internal/lmsr"
 	"github.com/mtlprog/total/internal/model"
@@ -24,6 +26,7 @@ import (
 type MarketHandler struct {
 	marketService     *service.MarketService
 	factoryService    *service.FactoryService
+	eventService      *service.EventService
 	ipfsClient        *ipfs.Client
 	tmpl              *template.Template
 	oraclePublicKey   string
@@ -35,6 +38,7 @@ type MarketHandler struct {
 func NewMarketHandler(
 	marketService *service.MarketService,
 	factoryService *service.FactoryService,
+	eventService *service.EventService,
 	ipfsClient *ipfs.Client,
 	tmpl *template.Template,
 	oraclePublicKey string,
@@ -44,12 +48,40 @@ func NewMarketHandler(
 	return &MarketHandler{
 		marketService:     marketService,
 		factoryService:    factoryService,
+		eventService:      eventService,
 		ipfsClient:        ipfsClient,
 		tmpl:              tmpl,
 		oraclePublicKey:   oraclePublicKey,
 		networkPassphrase: networkPassphrase,
 		logger:            logger,
 	}
+}
+
+const cookieMaxAge = 10 * 365 * 24 * 3600 // 10 years
+
+// accountIDFromCookie reads the account_id cookie value.
+func accountIDFromCookie(r *http.Request) string {
+	c, err := r.Cookie("account_id")
+	if err != nil || c.Value == "" {
+		return ""
+	}
+	// Basic validation: must look like a Stellar public key
+	if _, err := keypair.ParseAddress(c.Value); err != nil {
+		return ""
+	}
+	return c.Value
+}
+
+// setAccountIDCookie writes the account_id cookie.
+func setAccountIDCookie(w http.ResponseWriter, accountID string) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     "account_id",
+		Value:    accountID,
+		Path:     "/",
+		MaxAge:   cookieMaxAge,
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+	})
 }
 
 // RegisterRoutes registers market routes.
@@ -63,6 +95,9 @@ func (h *MarketHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /market/{id}/resolve", h.handleResolveMarket)
 	mux.HandleFunc("POST /market/{id}/claim", h.handleBuildClaimTx)
 	mux.HandleFunc("POST /market/{id}/withdraw", h.handleBuildWithdrawTx)
+	mux.HandleFunc("GET /market/{id}/yes", h.handleOutcomePage)
+	mux.HandleFunc("GET /market/{id}/no", h.handleOutcomePage)
+	mux.HandleFunc("POST /account", h.handleSetAccount)
 	mux.HandleFunc("GET /oracle", h.handleOracleAdmin)
 	mux.HandleFunc("GET /deploy", h.handleRedirectToOracle)
 	mux.HandleFunc("POST /deploy", h.handleBuildDeployTx)
@@ -106,6 +141,8 @@ func shortID(id string) string {
 func (h *MarketHandler) handleListMarkets(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
+	accountID := accountIDFromCookie(r)
+
 	if h.factoryService == nil || !h.factoryService.HasFactory() {
 		data := map[string]any{
 			"Markets":         []MarketView{},
@@ -113,6 +150,7 @@ func (h *MarketHandler) handleListMarkets(w http.ResponseWriter, r *http.Request
 			"Error":           "Factory contract not configured",
 			"ActiveNav":       "markets",
 			"Network":         h.networkName(),
+			"AccountID":       accountID,
 		}
 		if err := h.tmpl.Render(w, "markets", data); err != nil {
 			h.logger.Error("failed to render template", "error", err)
@@ -131,6 +169,7 @@ func (h *MarketHandler) handleListMarkets(w http.ResponseWriter, r *http.Request
 			"Error":           "Failed to fetch markets from factory",
 			"ActiveNav":       "markets",
 			"Network":         h.networkName(),
+			"AccountID":       accountID,
 		}
 		if err := h.tmpl.Render(w, "markets", data); err != nil {
 			h.logger.Error("failed to render template", "error", err)
@@ -153,6 +192,7 @@ func (h *MarketHandler) handleListMarkets(w http.ResponseWriter, r *http.Request
 		"OraclePublicKey": h.oraclePublicKey,
 		"ActiveNav":       "markets",
 		"Network":         h.networkName(),
+		"AccountID":       accountID,
 	}
 
 	if err := h.tmpl.Render(w, "markets", data); err != nil {
@@ -224,7 +264,7 @@ func (h *MarketHandler) handleMarketDetail(w http.ResponseWriter, r *http.Reques
 	states, err := h.factoryService.GetMarketStates(ctx, []string{contractID})
 	if err != nil {
 		h.logger.Error("failed to get market state", "contract_id", contractID, "error", err)
-		h.writeError(w, err, "contract_id", contractID)
+		h.writeError(w, r, err, "contract_id", contractID)
 		return
 	}
 	if len(states) == 0 {
@@ -265,17 +305,23 @@ func (h *MarketHandler) handleMarketDetail(w http.ResponseWriter, r *http.Reques
 		market.Question = "Market " + shortID(contractID)
 	}
 
-	// Check for balance query
-	var userBalance *service.UserBalance
-	var balanceError string
+	// Resolve account: cookie first, then query param override
+	accountID := accountIDFromCookie(r)
 	accountKey := strings.TrimSpace(r.URL.Query().Get("account"))
 	if accountKey != "" {
-		if _, err := keypair.ParseAddress(accountKey); err != nil {
+		accountID = accountKey
+	}
+
+	// Fetch user balance if we have an account
+	var userBalance *service.UserBalance
+	var balanceError string
+	if accountID != "" {
+		if _, err := keypair.ParseAddress(accountID); err != nil {
 			balanceError = "Invalid Stellar public key format."
 		} else {
-			balance, err := h.marketService.GetBalance(ctx, contractID, accountKey)
+			balance, err := h.marketService.GetBalance(ctx, contractID, accountID)
 			if err != nil {
-				h.logger.Error("failed to get user balance", "account", accountKey, "error", err)
+				h.logger.Error("failed to get user balance", "account", accountID, "error", err)
 				balanceError = "Failed to load balance — please try again."
 			} else {
 				userBalance = balance
@@ -283,15 +329,31 @@ func (h *MarketHandler) handleMarketDetail(w http.ResponseWriter, r *http.Reques
 		}
 	}
 
+	// Fetch trade events and build price chart
+	var tradeEvents []service.TradeEvent
+	var priceChart string
+	if h.eventService != nil {
+		events, err := h.eventService.GetTradeEvents(ctx, contractID)
+		if err != nil {
+			h.logger.Warn("failed to get trade events", "contract_id", contractID, "error", err)
+		} else {
+			tradeEvents = events
+			if len(events) > 0 {
+				points := eventsToChartPoints(events)
+				priceChart = chart.RenderPriceChart(points, chart.DefaultWidth, chart.DefaultHeight)
+			}
+		}
+	}
+
 	data := map[string]any{
 		"Market":          &market,
 		"OraclePublicKey": h.oraclePublicKey,
-		"BarChart":        "", // TODO: add bar chart
-		"PriceChart":      "", // TODO: add price history chart
+		"PriceChart":      priceChart,
+		"TradeEvents":     tradeEvents,
 		"ActiveNav":       "markets",
 		"Network":         h.networkName(),
 		"UserBalance":     userBalance,
-		"AccountKey":      accountKey,
+		"AccountID":       accountID,
 		"BalanceError":    balanceError,
 	}
 
@@ -326,7 +388,7 @@ func (h *MarketHandler) handleGetQuote(w http.ResponseWriter, r *http.Request) {
 
 	quote, err := h.marketService.GetQuote(r.Context(), contractID, outcome, amount)
 	if err != nil {
-		h.writeError(w, err, "contract_id", contractID, "outcome", outcome, "amount", amount)
+		h.writeError(w, r, err, "contract_id", contractID, "outcome", outcome, "amount", amount)
 		return
 	}
 
@@ -336,6 +398,7 @@ func (h *MarketHandler) handleGetQuote(w http.ResponseWriter, r *http.Request) {
 		"ContractID": contractID,
 		"ActiveNav":  "markets",
 		"Network":    h.networkName(),
+		"AccountID":  accountIDFromCookie(r),
 	}
 
 	if err := h.tmpl.Render(w, "quote", data); err != nil {
@@ -402,7 +465,7 @@ func (h *MarketHandler) handleBuildBuyTx(w http.ResponseWriter, r *http.Request)
 
 	result, err := h.marketService.BuildBuyTx(r.Context(), req)
 	if err != nil {
-		h.writeError(w, err, "contract_id", contractID, "outcome", outcome, "amount", amount)
+		h.writeError(w, r, err, "contract_id", contractID, "outcome", outcome, "amount", amount)
 		return
 	}
 
@@ -413,6 +476,7 @@ func (h *MarketHandler) handleBuildBuyTx(w http.ResponseWriter, r *http.Request)
 		"ActiveNav":         "markets",
 		"Network":           h.networkName(),
 		"NetworkPassphrase": h.networkPassphrase,
+		"AccountID":         accountIDFromCookie(r),
 	}
 
 	if err := h.tmpl.Render(w, "transaction", data); err != nil {
@@ -479,7 +543,7 @@ func (h *MarketHandler) handleBuildSellTx(w http.ResponseWriter, r *http.Request
 
 	result, err := h.marketService.BuildSellTx(r.Context(), req)
 	if err != nil {
-		h.writeError(w, err, "contract_id", contractID, "outcome", outcome, "amount", amount)
+		h.writeError(w, r, err, "contract_id", contractID, "outcome", outcome, "amount", amount)
 		return
 	}
 
@@ -490,6 +554,7 @@ func (h *MarketHandler) handleBuildSellTx(w http.ResponseWriter, r *http.Request
 		"ActiveNav":         "markets",
 		"Network":           h.networkName(),
 		"NetworkPassphrase": h.networkPassphrase,
+		"AccountID":         accountIDFromCookie(r),
 	}
 
 	if err := h.tmpl.Render(w, "transaction", data); err != nil {
@@ -522,7 +587,7 @@ func (h *MarketHandler) handleResolveMarket(w http.ResponseWriter, r *http.Reque
 
 	result, err := h.marketService.BuildResolveTx(r.Context(), req)
 	if err != nil {
-		h.writeError(w, err, "contract_id", contractID, "outcome", outcome)
+		h.writeError(w, r, err, "contract_id", contractID, "outcome", outcome)
 		return
 	}
 
@@ -532,6 +597,7 @@ func (h *MarketHandler) handleResolveMarket(w http.ResponseWriter, r *http.Reque
 		"ActiveNav":         "oracle",
 		"Network":           h.networkName(),
 		"NetworkPassphrase": h.networkPassphrase,
+		"AccountID":         accountIDFromCookie(r),
 	}
 
 	if err := h.tmpl.Render(w, "transaction", data); err != nil {
@@ -563,7 +629,7 @@ func (h *MarketHandler) handleBuildClaimTx(w http.ResponseWriter, r *http.Reques
 
 	result, err := h.marketService.BuildClaimTx(r.Context(), req)
 	if err != nil {
-		h.writeError(w, err, "contract_id", contractID, "user_public_key", userPubKey)
+		h.writeError(w, r, err, "contract_id", contractID, "user_public_key", userPubKey)
 		return
 	}
 
@@ -573,6 +639,7 @@ func (h *MarketHandler) handleBuildClaimTx(w http.ResponseWriter, r *http.Reques
 		"ActiveNav":         "markets",
 		"Network":           h.networkName(),
 		"NetworkPassphrase": h.networkPassphrase,
+		"AccountID":         accountIDFromCookie(r),
 	}
 
 	if err := h.tmpl.Render(w, "transaction", data); err != nil {
@@ -604,7 +671,7 @@ func (h *MarketHandler) handleBuildWithdrawTx(w http.ResponseWriter, r *http.Req
 
 	result, err := h.marketService.BuildWithdrawTx(r.Context(), req)
 	if err != nil {
-		h.writeError(w, err, "contract_id", contractID, "oracle_public_key", oraclePubKey)
+		h.writeError(w, r, err, "contract_id", contractID, "oracle_public_key", oraclePubKey)
 		return
 	}
 
@@ -614,12 +681,195 @@ func (h *MarketHandler) handleBuildWithdrawTx(w http.ResponseWriter, r *http.Req
 		"ActiveNav":         "oracle",
 		"Network":           h.networkName(),
 		"NetworkPassphrase": h.networkPassphrase,
+		"AccountID":         accountIDFromCookie(r),
 	}
 
 	if err := h.tmpl.Render(w, "transaction", data); err != nil {
 		h.logger.Error("failed to render template", "error", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 	}
+}
+
+// handleSetAccount handles POST /account to save account_id cookie.
+func (h *MarketHandler) handleSetAccount(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "Invalid form data", http.StatusBadRequest)
+		return
+	}
+
+	accountID := strings.TrimSpace(r.FormValue("account_id"))
+	if accountID == "" {
+		// Clear cookie
+		http.SetCookie(w, &http.Cookie{
+			Name:   "account_id",
+			Value:  "",
+			Path:   "/",
+			MaxAge: -1,
+		})
+	} else {
+		if _, err := keypair.ParseAddress(accountID); err != nil {
+			http.Error(w, "Invalid Stellar public key", http.StatusBadRequest)
+			return
+		}
+		setAccountIDCookie(w, accountID)
+	}
+
+	// Redirect back to referrer path (same-origin only) or home
+	redirect := "/"
+	if referer := r.Header.Get("Referer"); referer != "" {
+		if u, err := url.Parse(referer); err == nil && u.Path != "" {
+			redirect = u.Path
+		}
+	}
+	http.Redirect(w, r, redirect, http.StatusSeeOther)
+}
+
+// handleOutcomePage renders a dedicated YES or NO page for social media sharing.
+func (h *MarketHandler) handleOutcomePage(w http.ResponseWriter, r *http.Request) {
+	contractID := r.PathValue("id")
+	if contractID == "" {
+		http.Error(w, "Contract ID required", http.StatusBadRequest)
+		return
+	}
+
+	// Determine outcome from URL path
+	path := r.URL.Path
+	var outcome string
+	if strings.HasSuffix(path, "/yes") {
+		outcome = "YES"
+	} else if strings.HasSuffix(path, "/no") {
+		outcome = "NO"
+	} else {
+		http.Error(w, "Invalid outcome", http.StatusBadRequest)
+		return
+	}
+
+	if h.factoryService == nil || !h.factoryService.HasFactory() {
+		http.Error(w, "Factory contract not configured", http.StatusServiceUnavailable)
+		return
+	}
+
+	ctx := r.Context()
+
+	states, err := h.factoryService.GetMarketStates(ctx, []string{contractID})
+	if err != nil {
+		h.writeError(w, r, err, "contract_id", contractID)
+		return
+	}
+	if len(states) == 0 {
+		http.Error(w, "Market not found", http.StatusNotFound)
+		return
+	}
+
+	state := states[0]
+	market := model.Market{
+		ID:       state.ContractID,
+		YesSold:  float64(state.YesSold) / float64(soroban.ScaleFactor),
+		NoSold:   float64(state.NoSold) / float64(soroban.ScaleFactor),
+		PriceYes: state.PriceYes,
+		PriceNo:  state.PriceNo,
+	}
+
+	if state.Resolved {
+		market.Resolution = model.OutcomeYes // TODO: get actual resolution
+	}
+
+	if state.MetadataHash != "" && h.ipfsClient != nil {
+		var metadata model.MarketMetadata
+		if err := h.ipfsClient.GetJSON(ctx, state.MetadataHash, &metadata); err != nil {
+			h.logger.Warn("failed to fetch metadata", "hash", state.MetadataHash, "error", err)
+			market.Question = "Market " + shortID(contractID)
+		} else {
+			market.Question = metadata.Question
+			market.Description = metadata.Description
+		}
+		market.MetadataHash = state.MetadataHash
+	} else {
+		market.Question = "Market " + shortID(contractID)
+	}
+
+	// Get user balance from cookie
+	accountID := accountIDFromCookie(r)
+	var userBalance *service.UserBalance
+	if accountID != "" {
+		balance, err := h.marketService.GetBalance(ctx, contractID, accountID)
+		if err != nil {
+			h.logger.Warn("failed to get user balance for outcome page", "error", err)
+		} else {
+			userBalance = balance
+		}
+	}
+
+	// Build OG meta tags
+	var price float64
+	if outcome == "YES" {
+		price = market.PriceYes
+	} else {
+		price = market.PriceNo
+	}
+	ogTitle := fmt.Sprintf("Vote %s: %s", outcome, market.Question)
+	ogDescription := fmt.Sprintf("%s is at %.0f%% — Trade on Total", outcome, price*100)
+
+	data := map[string]any{
+		"Market":            &market,
+		"Outcome":           outcome,
+		"OutcomePrice":      price,
+		"OGTitle":           ogTitle,
+		"OGDescription":     ogDescription,
+		"UserBalance":       userBalance,
+		"AccountID":         accountID,
+		"ActiveNav":         "markets",
+		"Network":           h.networkName(),
+		"NetworkPassphrase": h.networkPassphrase,
+	}
+
+	if err := h.tmpl.Render(w, "outcome", data); err != nil {
+		h.logger.Error("failed to render template", "error", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+	}
+}
+
+// eventsToChartPoints converts trade events into price points for charting.
+// Uses cumulative sold quantities to approximate price via the same ratio method.
+func eventsToChartPoints(events []service.TradeEvent) []model.PricePoint {
+	var yesSold, noSold float64
+	points := make([]model.PricePoint, 0, len(events))
+
+	for _, evt := range events {
+		if evt.Kind == "buy" {
+			if evt.Outcome == "YES" {
+				yesSold += evt.Amount
+			} else {
+				noSold += evt.Amount
+			}
+		} else if evt.Kind == "sell" {
+			if evt.Outcome == "YES" {
+				yesSold -= evt.Amount
+			} else {
+				noSold -= evt.Amount
+			}
+		}
+
+		// Calculate approximate YES price
+		total := yesSold + noSold
+		priceYes := 0.5
+		if total > 0 {
+			priceYes = yesSold / total
+		}
+		if priceYes < 0.01 {
+			priceYes = 0.01
+		}
+		if priceYes > 0.99 {
+			priceYes = 0.99
+		}
+
+		points = append(points, model.PricePoint{
+			Timestamp: evt.Timestamp,
+			PriceYes:  priceYes,
+		})
+	}
+
+	return points
 }
 
 // handleRedirectToOracle redirects /deploy to /oracle.
@@ -662,6 +912,7 @@ func (h *MarketHandler) handleOracleAdmin(w http.ResponseWriter, r *http.Request
 		"MarketsError":          marketsError,
 		"ActiveNav":             "oracle",
 		"Network":               h.networkName(),
+		"AccountID":             accountIDFromCookie(r),
 	}
 
 	if err := h.tmpl.Render(w, "oracle", data); err != nil {
@@ -717,7 +968,7 @@ func (h *MarketHandler) handleBuildDeployTx(w http.ResponseWriter, r *http.Reque
 
 	result, err := h.factoryService.BuildDeployMarketTx(r.Context(), req)
 	if err != nil {
-		h.writeError(w, err, "liquidity_param", liquidityParam, "metadata_hash", metadataHash)
+		h.writeError(w, r, err, "liquidity_param", liquidityParam, "metadata_hash", metadataHash)
 		return
 	}
 
@@ -727,6 +978,7 @@ func (h *MarketHandler) handleBuildDeployTx(w http.ResponseWriter, r *http.Reque
 		"ActiveNav":         "oracle",
 		"Network":           h.networkName(),
 		"NetworkPassphrase": h.networkPassphrase,
+		"AccountID":         accountIDFromCookie(r),
 	}
 
 	if err := h.tmpl.Render(w, "transaction", data); err != nil {
@@ -833,53 +1085,62 @@ func mapError(err error) errorResponse {
 // IMPORTANT: Keep this mapping in sync when adding new error codes to the contract.
 func mapContractError(errStr string) errorResponse {
 	// Extract error code from string like "Error(Contract, #13)"
+	// Check multi-digit codes before single-digit to avoid substring collisions
+	// (e.g., "#1" matching "#10", "#11", etc.)
 	switch {
-	case strings.Contains(errStr, "#1"):
-		return errorResponse{"Contract is already initialized.", http.StatusConflict}
-	case strings.Contains(errStr, "#2"):
-		return errorResponse{"Contract is not initialized.", http.StatusBadRequest}
-	case strings.Contains(errStr, "#3"):
-		return errorResponse{"Market has already been resolved.", http.StatusConflict}
-	case strings.Contains(errStr, "#4"):
-		return errorResponse{"Market has not been resolved yet.", http.StatusBadRequest}
-	case strings.Contains(errStr, "#5"):
-		return errorResponse{"Invalid outcome. Must be YES (0) or NO (1).", http.StatusBadRequest}
-	case strings.Contains(errStr, "#6"):
-		return errorResponse{"Invalid amount.", http.StatusBadRequest}
-	case strings.Contains(errStr, "#7"):
-		return errorResponse{"Insufficient token balance.", http.StatusBadRequest}
-	case strings.Contains(errStr, "#8"):
-		return errorResponse{"Slippage exceeded. Price moved unfavorably.", http.StatusBadRequest}
-	case strings.Contains(errStr, "#9"):
-		return errorResponse{"Return amount too low.", http.StatusBadRequest}
-	case strings.Contains(errStr, "#10"):
-		return errorResponse{"Unauthorized. Only the oracle can perform this action.", http.StatusForbidden}
-	case strings.Contains(errStr, "#11"):
-		return errorResponse{"Invalid liquidity parameter.", http.StatusBadRequest}
-	case strings.Contains(errStr, "#12"):
-		return errorResponse{"Arithmetic overflow.", http.StatusBadRequest}
-	case strings.Contains(errStr, "#13"):
-		return errorResponse{"Nothing to claim. You either have no winning tokens or already claimed.", http.StatusBadRequest}
-	case strings.Contains(errStr, "#14"):
-		return errorResponse{"Contract storage corrupted.", http.StatusInternalServerError}
 	case strings.Contains(errStr, "#15"):
 		return errorResponse{"Insufficient pool balance.", http.StatusBadRequest}
+	case strings.Contains(errStr, "#14"):
+		return errorResponse{"Contract storage corrupted.", http.StatusInternalServerError}
+	case strings.Contains(errStr, "#13"):
+		return errorResponse{"Nothing to claim. You either have no winning tokens or already claimed.", http.StatusBadRequest}
+	case strings.Contains(errStr, "#12"):
+		return errorResponse{"Arithmetic overflow.", http.StatusBadRequest}
+	case strings.Contains(errStr, "#11"):
+		return errorResponse{"Invalid liquidity parameter.", http.StatusBadRequest}
+	case strings.Contains(errStr, "#10"):
+		return errorResponse{"Unauthorized. Only the oracle can perform this action.", http.StatusForbidden}
+	case strings.Contains(errStr, "#9"):
+		return errorResponse{"Return amount too low.", http.StatusBadRequest}
+	case strings.Contains(errStr, "#8"):
+		return errorResponse{"Slippage exceeded. Price moved unfavorably.", http.StatusBadRequest}
+	case strings.Contains(errStr, "#7"):
+		return errorResponse{"Insufficient token balance.", http.StatusBadRequest}
+	case strings.Contains(errStr, "#6"):
+		return errorResponse{"Invalid amount.", http.StatusBadRequest}
+	case strings.Contains(errStr, "#5"):
+		return errorResponse{"Invalid outcome. Must be YES (0) or NO (1).", http.StatusBadRequest}
+	case strings.Contains(errStr, "#4"):
+		return errorResponse{"Market has not been resolved yet.", http.StatusBadRequest}
+	case strings.Contains(errStr, "#3"):
+		return errorResponse{"Market has already been resolved.", http.StatusConflict}
+	case strings.Contains(errStr, "#2"):
+		return errorResponse{"Contract is not initialized.", http.StatusBadRequest}
+	case strings.Contains(errStr, "#1"):
+		return errorResponse{"Contract is already initialized.", http.StatusConflict}
 	default:
 		return errorResponse{fmt.Sprintf("Contract error occurred: %s", errStr), http.StatusBadRequest}
 	}
 }
 
 // writeError writes an error response with appropriate status code.
-func (h *MarketHandler) writeError(w http.ResponseWriter, err error, logContext ...any) {
+func (h *MarketHandler) writeError(w http.ResponseWriter, r *http.Request, err error, logContext ...any) {
 	resp := mapError(err)
 	logArgs := append([]any{"error", err, "status", resp.Status}, logContext...)
 	h.logger.Error("request failed", logArgs...)
+
+	var accountID string
+	if r != nil {
+		accountID = accountIDFromCookie(r)
+	}
 
 	w.WriteHeader(resp.Status)
 	data := map[string]any{
 		"ErrorCode":    resp.Status,
 		"ErrorMessage": resp.Message,
 		"ActiveNav":    "",
+		"AccountID":    accountID,
+		"Network":      h.networkName(),
 	}
 	if tmplErr := h.tmpl.Render(w, "error", data); tmplErr != nil {
 		h.logger.Error("failed to render error template", "error", tmplErr)

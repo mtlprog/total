@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{.Outcome}} — {{.Market.Question}} — Total</title>
+    <meta name="description" content="{{.OGDescription}}">
+    <meta property="og:title" content="{{.OGTitle}}">
+    <meta property="og:description" content="{{.OGDescription}}">
+    <meta property="og:type" content="website">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+    {{template "styles" .}}
+</head>
+<body>
+    <div class="container">
+        {{template "header" .}}
+        <main class="main">
+
+            <div class="back-links">
+                <a href="/" class="back-link">← Markets</a>
+                <a href="/market/{{.Market.ID}}" class="back-link">← Market</a>
+            </div>
+
+            <h1 style="font-size: 1rem; font-weight: 700; line-height: 1.5; margin-bottom: 0.5rem; color: var(--text-2);">{{.Market.Question}}</h1>
+
+            <div style="margin: 1.5rem 0 1rem;">
+                <div style="text-align: center;">
+                    <div style="font-size: 0.875rem; letter-spacing: 0.25em; text-transform: uppercase; color: {{if eq .Outcome "YES"}}var(--yes){{else}}var(--no){{end}}; margin-bottom: 0.5rem;">{{.Outcome}}</div>
+                    <div style="font-size: 4rem; font-weight: 700; line-height: 1; color: {{if eq .Outcome "YES"}}var(--yes){{else}}var(--no){{end}};">{{printf "%.0f" (mul .OutcomePrice 100)}}%</div>
+                </div>
+            </div>
+
+            <div class="prob-bar" style="height: 4px; margin-bottom: 1.5rem;">
+                <div class="prob-bar-yes" style="width: {{printf "%.1f" (mul .Market.PriceYes 100)}}%"></div>
+                <div class="prob-bar-no"></div>
+            </div>
+
+            <div style="display: flex; justify-content: center; gap: 2rem; margin-bottom: 1.5rem; font-size: 0.875rem; color: var(--text-2);">
+                <span>YES <span class="text-yes" style="font-weight:700;">{{printf "%.0f" (mul .Market.PriceYes 100)}}%</span></span>
+                <span>NO <span class="text-no" style="font-weight:700;">{{printf "%.0f" (mul .Market.PriceNo 100)}}%</span></span>
+            </div>
+
+            {{if .UserBalance}}
+            <div class="panel" style="text-align: center;">
+                <h3 class="panel-title">Your {{.Outcome}} Tokens</h3>
+                <div style="font-size: 2rem; font-weight: 700; color: {{if eq .Outcome "YES"}}var(--yes){{else}}var(--no){{end}};">
+                    {{if eq .Outcome "YES"}}{{printf "%.2f" .UserBalance.YesBalance}}{{else}}{{printf "%.2f" .UserBalance.NoBalance}}{{end}}
+                </div>
+            </div>
+            {{end}}
+
+            {{if not .Market.IsResolved}}
+            <div class="panel">
+                <form method="POST" action="/market/{{.Market.ID}}/buy">
+                    <input type="hidden" name="outcome" value="{{.Outcome}}">
+                    {{if .AccountID}}
+                    <input type="hidden" name="user_public_key" value="{{.AccountID}}">
+                    {{else}}
+                    <div class="form-group">
+                        <label class="form-label">Your Stellar Public Key</label>
+                        <input class="form-input" type="text" name="user_public_key" placeholder="G..." required pattern="G[A-Z2-7]{55}">
+                    </div>
+                    {{end}}
+                    <div class="trade-form">
+                        <div class="form-group">
+                            <label class="form-label">Amount</label>
+                            <input class="form-input" type="number" name="amount" min="0.01" step="0.01" value="10" required>
+                        </div>
+                        <div class="trade-actions">
+                            <button type="submit" class="btn {{if eq .Outcome "YES"}}btn-yes{{else}}btn-no{{end}}" formaction="/market/{{.Market.ID}}/buy">BUY</button>
+                            <button type="submit" class="btn" formaction="/market/{{.Market.ID}}/sell">SELL</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            {{else}}
+            <div class="resolved-banner {{if eq .Market.Resolution.String "YES"}}yes{{else}}no{{end}}">
+                Market Resolved — {{.Market.Resolution}} Wins
+            </div>
+            {{end}}
+
+        </main>
+    </div>
+    {{template "footer" .}}
+</body>
+</html>

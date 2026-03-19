@@ -252,6 +252,21 @@ func (c *Client) WaitForTransaction(ctx context.Context, hash string, timeout ti
 	}
 }
 
+// GetEvents retrieves contract events matching the given filters.
+func (c *Client) GetEvents(ctx context.Context, params GetEventsParams) (*GetEventsResult, error) {
+	resp, err := c.call(ctx, "getEvents", params)
+	if err != nil {
+		return nil, err
+	}
+
+	var result GetEventsResult
+	if err := json.Unmarshal(resp.Result, &result); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal result: %w", err)
+	}
+
+	return &result, nil
+}
+
 // GetLedgerEntries retrieves ledger entries by their keys.
 func (c *Client) GetLedgerEntries(ctx context.Context, keys []string) (*GetLedgerEntriesResult, error) {
 	params := GetLedgerEntriesParams{
