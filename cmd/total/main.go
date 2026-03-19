@@ -108,6 +108,9 @@ func run() error {
 		slog.Info("IPFS client enabled (read-only)")
 	}
 
+	// Initialize event service
+	eventService := service.NewEventService(sorobanClient, slog.Default())
+
 	// Warmup IPFS cache
 	go warmupIPFSCache(factoryService, ipfsClient)
 
@@ -121,6 +124,7 @@ func run() error {
 	marketHandler := handler.NewMarketHandler(
 		marketService,
 		factoryService,
+		eventService,
 		ipfsClient,
 		tmpl,
 		cfg.OraclePublicKey,

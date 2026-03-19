@@ -180,6 +180,45 @@ type GetLatestLedgerResult struct {
 	Sequence        uint32 `json:"sequence"`
 }
 
+// GetEventsParams for getEvents RPC call.
+type GetEventsParams struct {
+	StartLedger uint32           `json:"startLedger"`
+	Filters     []EventFilter    `json:"filters,omitempty"`
+	Pagination  *EventPagination `json:"pagination,omitempty"`
+}
+
+// EventFilter filters events by type, contract, and topics.
+type EventFilter struct {
+	Type        string     `json:"type"`
+	ContractIDs []string   `json:"contractIds,omitempty"`
+	Topics      [][]string `json:"topics,omitempty"`
+}
+
+// EventPagination controls pagination for getEvents.
+type EventPagination struct {
+	Limit  int    `json:"limit,omitempty"`
+	Cursor string `json:"cursor,omitempty"`
+}
+
+// GetEventsResult from getEvents RPC call.
+type GetEventsResult struct {
+	Events       []ContractEvent `json:"events"`
+	LatestLedger uint32          `json:"latestLedger"`
+}
+
+// ContractEvent represents a single contract event from the ledger.
+type ContractEvent struct {
+	Type                     string   `json:"type"`
+	Ledger                   uint32   `json:"ledger"`
+	LedgerClosedAt           string   `json:"ledgerClosedAt"`
+	ContractID               string   `json:"contractId"`
+	ID                       string   `json:"id"`
+	PagingToken              string   `json:"pagingToken"`
+	InSuccessfulContractCall bool     `json:"inSuccessfulContractCall"`
+	Topic                    []string `json:"topic"`
+	Value                    string   `json:"value"`
+}
+
 // Outcome constants matching Soroban contract.
 const (
 	OutcomeYes uint32 = 0

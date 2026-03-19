@@ -720,6 +720,161 @@
         color: var(--text-2);
     }
 
+    /* ─── ACCOUNT CHIP ─── */
+    .account-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.25rem 0.55rem;
+        font-size: 0.875rem;
+        color: var(--text-2);
+        border: 1px solid var(--border-mid);
+        letter-spacing: 0.05em;
+    }
+
+    .account-chip-key { color: var(--text); }
+
+    .account-chip-edit {
+        background: none;
+        border: none;
+        color: var(--text-2);
+        cursor: pointer;
+        font-family: var(--font);
+        font-size: 0.75rem;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        padding: 0;
+        transition: color 0.15s;
+    }
+
+    .account-chip-edit:hover { color: var(--text); }
+
+    .account-banner {
+        border: 1px solid var(--border);
+        padding: 1rem 1.5rem;
+        margin-bottom: 2rem;
+        background: var(--bg-surface);
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+    }
+
+    .account-banner-label {
+        font-size: 0.875rem;
+        color: var(--text-2);
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        white-space: nowrap;
+    }
+
+    .account-banner .form-input {
+        flex: 1;
+        min-width: 200px;
+        margin: 0;
+    }
+
+    .account-edit-inline {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .account-edit-inline .form-input {
+        width: 320px;
+        font-size: 0.8rem;
+    }
+
+    /* ─── OUTCOME CARDS ─── */
+    .outcome-cards {
+        display: flex;
+        gap: 1px;
+        background: var(--border);
+        margin-bottom: 1.5rem;
+    }
+
+    .outcome-card {
+        flex: 1;
+        border: 2px solid var(--border);
+        padding: 1.5rem;
+        cursor: pointer;
+        transition: border-color 0.15s, background 0.12s;
+        background: var(--bg-surface);
+        text-align: center;
+    }
+
+    .outcome-card:hover { background: var(--bg-card); }
+
+    .outcome-card.selected.yes { border-color: var(--yes); background: var(--bg-card); }
+    .outcome-card.selected.no  { border-color: var(--no);  background: var(--bg-card); }
+
+    .outcome-card-label {
+        font-size: 0.875rem;
+        letter-spacing: 0.25em;
+        text-transform: uppercase;
+        color: var(--text-2);
+        margin-bottom: 0.5rem;
+    }
+
+    .outcome-card.yes .outcome-card-label { color: var(--yes); }
+    .outcome-card.no  .outcome-card-label { color: var(--no); }
+
+    .outcome-card-price {
+        font-size: 3rem;
+        font-weight: 700;
+        line-height: 1;
+        margin-bottom: 0.5rem;
+    }
+
+    .outcome-card.yes .outcome-card-price { color: var(--yes); }
+    .outcome-card.no  .outcome-card-price { color: var(--no); }
+
+    .outcome-card-balance {
+        font-size: 0.825rem;
+        color: var(--text-2);
+        margin-top: 0.5rem;
+    }
+
+    /* ─── TRADE FORM (unified) ─── */
+    .trade-form {
+        display: flex;
+        gap: 0.75rem;
+        align-items: flex-end;
+        flex-wrap: wrap;
+    }
+
+    .trade-form .form-group { margin-bottom: 0; flex: 1; min-width: 120px; }
+
+    .trade-actions {
+        display: flex;
+        gap: 0.5rem;
+    }
+
+    /* ─── TRADE HISTORY ─── */
+    .trade-event {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.4rem 0;
+        border-bottom: 1px solid var(--border);
+        font-size: 0.825rem;
+    }
+
+    .trade-event:last-child { border-bottom: none; }
+
+    .trade-event-kind {
+        font-weight: 700;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        width: 3rem;
+    }
+
+    .trade-event-kind.buy { color: var(--yes); }
+    .trade-event-kind.sell { color: var(--no); }
+
+    .trade-event-detail { color: var(--text-2); flex: 1; margin-left: 0.75rem; }
+    .trade-event-cost { color: var(--text); text-align: right; }
+
     /* ─── UTILITIES ─── */
     .text-yes { color: var(--yes); }
     .text-no { color: var(--no); }
@@ -738,6 +893,17 @@
 <header class="header">
     <a href="/" class="header-brand">Total</a>
     <div class="header-right">
+        {{if .AccountID}}
+        <span class="account-chip" id="account-display">
+            <span class="account-chip-key">{{shortID .AccountID}}</span>
+            <button class="account-chip-edit" onclick="document.getElementById('account-display').style.display='none';document.getElementById('account-edit').style.display='flex';">edit</button>
+        </span>
+        <form method="POST" action="/account" class="account-edit-inline" id="account-edit" style="display:none;">
+            <input class="form-input" type="text" name="account_id" value="{{.AccountID}}" placeholder="G..." pattern="G[A-Z2-7]{55}">
+            <button type="submit" class="btn" style="padding:0.35rem 0.75rem;font-size:0.75rem;">Save</button>
+            <button type="button" class="account-chip-edit" onclick="document.getElementById('account-edit').style.display='none';document.getElementById('account-display').style.display='inline-flex';">cancel</button>
+        </form>
+        {{end}}
         <button class="theme-toggle" onclick="(function(){var h=document.documentElement,n=h.dataset.theme==='dark'?'light':'dark';h.dataset.theme=n;try{localStorage.setItem('theme',n)}catch(e){console.warn('[Total] Cannot save theme:',e)}})()" aria-label="Toggle light/dark theme">
             <svg class="theme-icon theme-icon-sun" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>
@@ -753,6 +919,15 @@
         {{end}}
     </div>
 </header>
+{{if not .AccountID}}
+<div class="account-banner">
+    <span class="account-banner-label">Connect your account</span>
+    <form method="POST" action="/account" style="display:flex;gap:0.5rem;flex:1;align-items:center;">
+        <input class="form-input" type="text" name="account_id" placeholder="Enter your Stellar public key (G...)" required pattern="G[A-Z2-7]{55}" style="flex:1;">
+        <button type="submit" class="btn" style="white-space:nowrap;">Connect</button>
+    </form>
+</div>
+{{end}}
 {{end}}
 
 {{define "footer"}}

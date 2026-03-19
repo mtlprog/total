@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
+	"time"
 
 	"github.com/mtlprog/total/internal/model"
 	"github.com/mtlprog/total/internal/soroban"
@@ -26,6 +27,7 @@ type FactoryService struct {
 	factoryContract string
 	oraclePublicKey string
 	logger          *slog.Logger
+	stateCache      *StateCache
 }
 
 // NewFactoryService creates a new factory service.
@@ -37,7 +39,7 @@ func NewFactoryService(
 	oraclePublicKey string,
 	logger *slog.Logger,
 ) *FactoryService {
-	return &FactoryService{
+	fs := &FactoryService{
 		sorobanClient:   sorobanClient,
 		stellarClient:   stellarClient,
 		txBuilder:       txBuilder,
@@ -45,6 +47,24 @@ func NewFactoryService(
 		oraclePublicKey: oraclePublicKey,
 		logger:          logger,
 	}
+
+	// Initialize state cache with a loader that fetches from Soroban RPC
+	fs.stateCache = NewStateCache(func(ids []string) (map[string]MarketState, error) {
+		result := make(map[string]MarketState, len(ids))
+		for _, id := range ids {
+			ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+			state, err := fs.fetchMarketState(ctx, id)
+			cancel()
+			if err != nil {
+				logger.Warn("cache revalidation failed", "contract_id", id, "error", err)
+				continue
+			}
+			result[id] = *state
+		}
+		return result, nil
+	})
+
+	return fs
 }
 
 // HasFactory returns true if factory contract is configured.
@@ -132,7 +152,15 @@ func (s *FactoryService) GetMarketStates(ctx context.Context, contractIDs []stri
 		go func(idx int, contractID string) {
 			defer wg.Done()
 
-			state, err := s.getMarketState(ctx, contractID)
+			// Check cache first
+			if cached, ok := s.stateCache.Get(contractID); ok {
+				mu.Lock()
+				states[idx] = cached
+				mu.Unlock()
+				return
+			}
+
+			state, err := s.fetchMarketState(ctx, contractID)
 			if err != nil {
 				mu.Lock()
 				if firstErr == nil {
@@ -142,6 +170,8 @@ func (s *FactoryService) GetMarketStates(ctx context.Context, contractIDs []stri
 				s.logger.Warn("failed to get market state", "contract_id", contractID, "error", err)
 				return
 			}
+
+			s.stateCache.Set(contractID, *state)
 
 			mu.Lock()
 			states[idx] = *state
@@ -167,8 +197,8 @@ func (s *FactoryService) GetMarketStates(ctx context.Context, contractIDs []stri
 	return validStates, nil
 }
 
-// getMarketState fetches state for a single market.
-func (s *FactoryService) getMarketState(ctx context.Context, contractID string) (*MarketState, error) {
+// fetchMarketState fetches state for a single market from Soroban RPC (bypasses cache).
+func (s *FactoryService) fetchMarketState(ctx context.Context, contractID string) (*MarketState, error) {
 	// Get state (yes_sold, no_sold, pool, resolved)
 	stateTxXDR, err := s.txBuilder.BuildGetStateTx(ctx, stellar.GetStateTxParams{
 		UserPublicKey: s.oraclePublicKey,
