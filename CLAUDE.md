@@ -128,6 +128,9 @@ App loads `.env` file automatically via `godotenv` if present (ignored in produc
 - Go templates: use composition (`{{template "partial" .}}`), NOT inheritance (`{{define "content"}}...{{template "base"}}`) - multiple templates defining same block name conflict in flat namespace
 - Display IDs/hashes as `first8...last8` format using `shortID()` function (handler + template)
 - Sticky footer: footer element outside `.container`, body uses `display: flex; flex-direction: column; min-height: 100%`
+- Service methods must validate all inputs (public keys, contract IDs) even if handler already validates — defense in depth
+- docker-compose env var names must exactly match `getEnv()` keys in main.go (e.g., `PINATA_API_SECRET` not `PINATA_SECRET`)
+- Parallelize independent Soroban RPC calls (e.g., YES/NO balance fetches) with goroutines — each round-trip adds user-facing latency
 
 ### Soroban
 - All amounts use fixed-point with SCALE_FACTOR = 10^7 (matches Stellar precision)
@@ -141,6 +144,7 @@ App loads `.env` file automatically via `godotenv` if present (ignored in produc
 - Tokens are internal balances (no Stellar trustlines needed in Soroban mode)
 - Use `txnbuild.NewInfiniteTimeout()` for transactions signed externally (avoid TxTooLate)
 - Contract errors in simulation come as strings like "Error(Contract, #13)"; parse for user messages
+- Read-only contract queries (get_balance, get_quote): build tx with oracle as source, simulate (don't submit), parse return value
 
 ### Soroban Contract Development
 - Use `#![no_std]` - standard library not available
@@ -158,6 +162,7 @@ App loads `.env` file automatically via `godotenv` if present (ignored in produc
 - Initial funding must exceed `b * ln(2)` slightly (use 700000000 for b=1000000000, not 693147180)
 - Collateral token is configurable - can use XLM (native), EURMTL, USDC, or any SAC
 - Native XLM SAC on testnet: `CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC`
+- Soroban events: use `env.events().publish((topics_tuple), data)` — the `#[contractevent]` macro does not exist in soroban-sdk 22.0.0
 - See `contracts/README.md` for full deployment guide with verified CLI examples
 
 ### Refactoring Patterns
