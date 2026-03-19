@@ -131,6 +131,11 @@ App loads `.env` file automatically via `godotenv` if present (ignored in produc
 - Service methods must validate all inputs (public keys, contract IDs) even if handler already validates — defense in depth
 - docker-compose env var names must exactly match `getEnv()` keys in main.go (e.g., `PINATA_API_SECRET` not `PINATA_SECRET`)
 - Parallelize independent Soroban RPC calls (e.g., YES/NO balance fetches) with goroutines — each round-trip adds user-facing latency
+- `mapContractError` must check multi-digit error codes (#15→#10) before single-digit (#9→#1) — `strings.Contains("#1")` matches #10-#15
+- Every handler data map must include `"AccountID": accountIDFromCookie(r)` — the header partial conditionally renders account chip vs "Connect" banner
+- Template data maps for `writeError` also need `AccountID` and `Network` so error pages render the full header correctly
+- Use `formaction` attribute on `<button type="submit">` to route one form to multiple endpoints (e.g., BUY/SELL buttons in same form)
+- Account cookie: name `account_id`, max-age 10 years, HttpOnly, SameSite=Lax, read via `accountIDFromCookie(r)` helper
 
 ### Soroban
 - All amounts use fixed-point with SCALE_FACTOR = 10^7 (matches Stellar precision)
@@ -145,6 +150,9 @@ App loads `.env` file automatically via `godotenv` if present (ignored in produc
 - Use `txnbuild.NewInfiniteTimeout()` for transactions signed externally (avoid TxTooLate)
 - Contract errors in simulation come as strings like "Error(Contract, #13)"; parse for user messages
 - Read-only contract queries (get_balance, get_quote): build tx with oracle as source, simulate (don't submit), parse return value
+- `getEvents` topic filters use base64-encoded XDR ScVal (use `xdr.MarshalBase64(EncodeSymbol("buy"))` for symbols); wildcard position is literal `"*"`
+- Cache revalidation loaders (samber/hot) run in background goroutines — always use `context.WithTimeout`, never `context.Background()` directly
+- Market state cache (30s TTL) and event cache (5min TTL) are separate — events are immutable once emitted, state changes every trade
 
 ### Soroban Contract Development
 - Use `#![no_std]` - standard library not available
