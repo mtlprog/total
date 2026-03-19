@@ -51,6 +51,9 @@ var funcMap = template.FuncMap{
 		}
 		return s[:8] + "..." + s[len(s)-8:]
 	},
+	"stellarURI": func(xdr string) string {
+		return "web+stellar:tx?xdr=" + url.QueryEscape(xdr)
+	},
 	"isTestnet": func(passphrase string) bool {
 		return strings.Contains(passphrase, "Test")
 	},

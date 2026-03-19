@@ -1,15 +1,19 @@
 package handler
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/mtlprog/total/internal/chart"
 	"github.com/mtlprog/total/internal/ipfs"
@@ -102,6 +106,8 @@ func (h *MarketHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /deploy", h.handleRedirectToOracle)
 	mux.HandleFunc("POST /deploy", h.handleBuildDeployTx)
 	mux.HandleFunc("GET /health", h.handleHealth)
+	mux.HandleFunc("POST /api/quote/{id}", h.handleAPIQuote)
+	mux.HandleFunc("POST /api/mtl-wallet", h.handleMTLWallet)
 }
 
 // networkName returns "testnet" or "public" based on the network passphrase.
@@ -1074,6 +1080,11 @@ func mapError(err error) errorResponse {
 	case errors.Is(err, soroban.ErrRPCError):
 		return errorResponse{"Failed to communicate with the blockchain. Please try again later.", http.StatusBadGateway}
 	case errors.Is(err, soroban.ErrSimulationFailed):
+		// Check if the simulation error contains a contract error code
+		errStr := err.Error()
+		if strings.Contains(errStr, "Error(Contract, #") {
+			return mapContractError(errStr)
+		}
 		return errorResponse{"Transaction simulation failed. Your parameters may be invalid.", http.StatusBadRequest}
 	case errors.Is(err, soroban.ErrTransactionFailed):
 		return errorResponse{"Transaction failed. Please check your parameters and try again.", http.StatusBadRequest}
@@ -1099,45 +1110,69 @@ func mapError(err error) errorResponse {
 
 // mapContractError maps Soroban contract error codes to user-friendly messages.
 // Error codes are defined in contracts/lmsr_market/src/error.rs
-// IMPORTANT: Keep this mapping in sync when adding new error codes to the contract.
+// IMPORTANT: Simulation errors may come from ANY contract in the call chain
+// (market contract, SAC token, etc.), so error codes are ambiguous.
+// We extract the LAST error code (innermost/root cause) and provide
+// context-aware messages where codes overlap with SAC token errors.
 func mapContractError(errStr string) errorResponse {
-	// Extract error code from string like "Error(Contract, #13)"
-	// Check multi-digit codes before single-digit to avoid substring collisions
-	// (e.g., "#1" matching "#10", "#11", etc.)
-	switch {
-	case strings.Contains(errStr, "#15"):
+	code := extractLastErrorCode(errStr)
+	switch code {
+	case 15:
 		return errorResponse{"Insufficient pool balance.", http.StatusBadRequest}
-	case strings.Contains(errStr, "#14"):
+	case 14:
 		return errorResponse{"Contract storage corrupted.", http.StatusInternalServerError}
-	case strings.Contains(errStr, "#13"):
+	case 13:
 		return errorResponse{"Nothing to claim. You either have no winning tokens or already claimed.", http.StatusBadRequest}
-	case strings.Contains(errStr, "#12"):
+	case 12:
 		return errorResponse{"Arithmetic overflow.", http.StatusBadRequest}
-	case strings.Contains(errStr, "#11"):
+	case 11:
 		return errorResponse{"Invalid liquidity parameter.", http.StatusBadRequest}
-	case strings.Contains(errStr, "#10"):
-		return errorResponse{"Unauthorized. Only the oracle can perform this action.", http.StatusForbidden}
-	case strings.Contains(errStr, "#9"):
+	case 10:
+		// Code #10 is ambiguous: market contract = Unauthorized, SAC token = insufficient balance.
+		// In buy/sell context, SAC errors are more likely, so use a combined message.
+		return errorResponse{"Transaction failed. Check that your account has enough EURMTL and the collateral token trustline.", http.StatusBadRequest}
+	case 9:
 		return errorResponse{"Return amount too low.", http.StatusBadRequest}
-	case strings.Contains(errStr, "#8"):
+	case 8:
 		return errorResponse{"Slippage exceeded. Price moved unfavorably.", http.StatusBadRequest}
-	case strings.Contains(errStr, "#7"):
+	case 7:
 		return errorResponse{"Insufficient token balance.", http.StatusBadRequest}
-	case strings.Contains(errStr, "#6"):
+	case 6:
 		return errorResponse{"Invalid amount.", http.StatusBadRequest}
-	case strings.Contains(errStr, "#5"):
+	case 5:
 		return errorResponse{"Invalid outcome. Must be YES (0) or NO (1).", http.StatusBadRequest}
-	case strings.Contains(errStr, "#4"):
+	case 4:
 		return errorResponse{"Market has not been resolved yet.", http.StatusBadRequest}
-	case strings.Contains(errStr, "#3"):
+	case 3:
 		return errorResponse{"Market has already been resolved.", http.StatusConflict}
-	case strings.Contains(errStr, "#2"):
+	case 2:
 		return errorResponse{"Contract is not initialized.", http.StatusBadRequest}
-	case strings.Contains(errStr, "#1"):
+	case 1:
 		return errorResponse{"Contract is already initialized.", http.StatusConflict}
 	default:
-		return errorResponse{fmt.Sprintf("Contract error occurred: %s", errStr), http.StatusBadRequest}
+		return errorResponse{fmt.Sprintf("Contract error #%d occurred.", code), http.StatusBadRequest}
 	}
+}
+
+// extractLastErrorCode extracts the last (innermost) error code from a simulation error string.
+// Example: "...Error(Contract, #10)...Error(Contract, #7)..." returns 7.
+func extractLastErrorCode(errStr string) int {
+	lastCode := -1
+	for i := 0; i < len(errStr); i++ {
+		idx := strings.Index(errStr[i:], "Error(Contract, #")
+		if idx < 0 {
+			break
+		}
+		i += idx + len("Error(Contract, #")
+		end := strings.Index(errStr[i:], ")")
+		if end < 0 {
+			break
+		}
+		if code, err := strconv.Atoi(errStr[i : i+end]); err == nil {
+			lastCode = code
+		}
+	}
+	return lastCode
 }
 
 // writeError writes an error response with appropriate status code.
@@ -1163,4 +1198,77 @@ func (h *MarketHandler) writeError(w http.ResponseWriter, r *http.Request, err e
 		// Headers already sent — cannot recover, just log
 		h.logger.Error("failed to render error template", "error", tmplErr)
 	}
+}
+
+// handleAPIQuote returns a JSON price quote for the trade form.
+func (h *MarketHandler) handleAPIQuote(w http.ResponseWriter, r *http.Request) {
+	contractID := r.PathValue("id")
+	outcomeStr := r.FormValue("outcome")
+	amountStr := r.FormValue("amount")
+
+	outcome, err := model.ParseOutcome(outcomeStr)
+	if err != nil {
+		http.Error(w, `{"error":"invalid outcome"}`, http.StatusBadRequest)
+		return
+	}
+
+	amount, err := strconv.ParseFloat(amountStr, 64)
+	if err != nil || amount <= 0 {
+		http.Error(w, `{"error":"invalid amount"}`, http.StatusBadRequest)
+		return
+	}
+
+	quote, err := h.marketService.GetQuote(r.Context(), contractID, outcome, amount)
+	if err != nil {
+		h.logger.Warn("quote API error", "error", err)
+		http.Error(w, `{"error":"quote unavailable"}`, http.StatusBadGateway)
+		return
+	}
+
+	costFloat := float64(quote.Cost) / float64(soroban.ScaleFactor)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]any{
+		"cost":        costFloat,
+		"price_after": quote.PriceAfter,
+	})
+}
+
+const mtlWalletAPI = "https://eurmtl.me/remote/sep07/add"
+
+// handleMTLWallet proxies a Stellar URI to the MTL Wallet API (mainnet only).
+// Accepts form-encoded "uri" from frontend, forwards as JSON to eurmtl.me.
+func (h *MarketHandler) handleMTLWallet(w http.ResponseWriter, r *http.Request) {
+	if strings.Contains(h.networkPassphrase, "Test") {
+		http.Error(w, "MTL Wallet is only available on mainnet", http.StatusBadRequest)
+		return
+	}
+
+	uri := r.FormValue("uri")
+	if uri == "" || !strings.HasPrefix(uri, "web+stellar:tx?") {
+		http.Error(w, "Invalid Stellar URI", http.StatusBadRequest)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+
+	jsonBody, _ := json.Marshal(map[string]string{"uri": uri})
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, mtlWalletAPI, bytes.NewReader(jsonBody))
+	if err != nil {
+		http.Error(w, "Failed to create request", http.StatusInternalServerError)
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		h.logger.Warn("MTL Wallet API unreachable", "error", err)
+		http.Error(w, "MTL Wallet is temporarily unavailable", http.StatusBadGateway)
+		return
+	}
+	defer resp.Body.Close()
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(resp.StatusCode)
+	io.Copy(w, resp.Body)
 }
