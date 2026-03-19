@@ -267,12 +267,16 @@ func (h *MarketHandler) handleMarketDetail(w http.ResponseWriter, r *http.Reques
 
 	// Check for balance query
 	var userBalance *service.UserBalance
+	var balanceError string
 	accountKey := strings.TrimSpace(r.URL.Query().Get("account"))
 	if accountKey != "" {
-		if _, err := keypair.ParseAddress(accountKey); err == nil {
+		if _, err := keypair.ParseAddress(accountKey); err != nil {
+			balanceError = "Invalid Stellar public key format."
+		} else {
 			balance, err := h.marketService.GetBalance(ctx, contractID, accountKey)
 			if err != nil {
-				h.logger.Warn("failed to get user balance", "account", accountKey, "error", err)
+				h.logger.Error("failed to get user balance", "account", accountKey, "error", err)
+				balanceError = "Failed to load balance — please try again."
 			} else {
 				userBalance = balance
 			}
@@ -288,6 +292,7 @@ func (h *MarketHandler) handleMarketDetail(w http.ResponseWriter, r *http.Reques
 		"Network":         h.networkName(),
 		"UserBalance":     userBalance,
 		"AccountKey":      accountKey,
+		"BalanceError":    balanceError,
 	}
 
 	if err := h.tmpl.Render(w, "market", data); err != nil {
