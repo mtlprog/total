@@ -416,6 +416,33 @@ func (b *Builder) BuildGetMetadataHashTx(ctx context.Context, params GetMetadata
 	return b.contractInvoker.BuildInvokeTx(ctx, invokeParams)
 }
 
+// GetWinningOutcomeTxParams contains parameters for getting winning outcome.
+type GetWinningOutcomeTxParams struct {
+	UserPublicKey string
+	ContractID    string
+}
+
+// BuildGetWinningOutcomeTx builds a transaction to call market.get_winning_outcome() (simulation only).
+func (b *Builder) BuildGetWinningOutcomeTx(ctx context.Context, params GetWinningOutcomeTxParams) (string, error) {
+	if b.contractInvoker == nil {
+		return "", fmt.Errorf("soroban client not configured")
+	}
+
+	userAccount, err := b.client.GetAccount(ctx, params.UserPublicKey)
+	if err != nil {
+		return "", fmt.Errorf("failed to get user account: %w", err)
+	}
+
+	invokeParams := soroban.InvokeParams{
+		SourceAccount: userAccount,
+		ContractID:    params.ContractID,
+		FunctionName:  "get_winning_outcome",
+		Args:          []xdr.ScVal{},
+	}
+
+	return b.contractInvoker.BuildInvokeTx(ctx, invokeParams)
+}
+
 // DeployMarketTxParams contains parameters for deploying a new market via factory.
 type DeployMarketTxParams struct {
 	OraclePublicKey string

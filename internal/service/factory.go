@@ -170,14 +170,15 @@ func (s *FactoryService) fetchMarketList(ctx context.Context) ([]string, error) 
 
 // MarketState represents the current state of a market contract.
 type MarketState struct {
-	ContractID   string
-	YesSold      int64
-	NoSold       int64
-	Pool         int64
-	Resolved     bool
-	MetadataHash string
-	PriceYes     float64
-	PriceNo      float64
+	ContractID     string
+	YesSold        int64
+	NoSold         int64
+	Pool           int64
+	Resolved       bool
+	WinningOutcome string // "YES", "NO", or "" if not resolved
+	MetadataHash   string
+	PriceYes       float64
+	PriceNo        float64
 }
 
 // GetMarketStates fetches state for multiple markets in parallel.
@@ -296,6 +297,15 @@ func (s *FactoryService) fetchMarketState(ctx context.Context, contractID string
 		return nil, fmt.Errorf("failed to decode resolved: %w", err)
 	}
 
+	// Get winning outcome if resolved
+	var winningOutcome string
+	if resolved {
+		winningOutcome, err = s.getWinningOutcome(ctx, contractID)
+		if err != nil {
+			s.logger.Warn("failed to get winning outcome", "contract_id", contractID, "error", err)
+		}
+	}
+
 	// Get metadata hash
 	metadataHash, err := s.getMetadataHash(ctx, contractID)
 	if err != nil {
@@ -307,14 +317,15 @@ func (s *FactoryService) fetchMarketState(ctx context.Context, contractID string
 	priceYes, priceNo := calculatePrices(yesSold, noSold)
 
 	return &MarketState{
-		ContractID:   contractID,
-		YesSold:      yesSold,
-		NoSold:       noSold,
-		Pool:         pool,
-		Resolved:     resolved,
-		MetadataHash: metadataHash,
-		PriceYes:     priceYes,
-		PriceNo:      priceNo,
+		ContractID:     contractID,
+		YesSold:        yesSold,
+		NoSold:         noSold,
+		Pool:           pool,
+		Resolved:       resolved,
+		WinningOutcome: winningOutcome,
+		MetadataHash:   metadataHash,
+		PriceYes:       priceYes,
+		PriceNo:        priceNo,
 	}, nil
 }
 
@@ -352,6 +363,47 @@ func (s *FactoryService) getMetadataHash(ctx context.Context, contractID string)
 	}
 
 	return hash, nil
+}
+
+// getWinningOutcome fetches the winning outcome from a resolved market contract.
+func (s *FactoryService) getWinningOutcome(ctx context.Context, contractID string) (string, error) {
+	txXDR, err := s.txBuilder.BuildGetWinningOutcomeTx(ctx, stellar.GetWinningOutcomeTxParams{
+		UserPublicKey: s.oraclePublicKey,
+		ContractID:    contractID,
+	})
+	if err != nil {
+		return "", fmt.Errorf("failed to build get_winning_outcome tx: %w", err)
+	}
+
+	simResult, err := s.sorobanClient.SimulateTransaction(ctx, txXDR)
+	if err != nil {
+		return "", fmt.Errorf("failed to simulate get_winning_outcome: %w", err)
+	}
+
+	if simResult.Error != "" {
+		return "", fmt.Errorf("simulation error: %s", simResult.Error)
+	}
+
+	if len(simResult.Results) == 0 || simResult.Results[0].XDR == "" {
+		return "", fmt.Errorf("no result from simulation")
+	}
+
+	returnVal, err := soroban.ParseReturnValue(simResult.Results[0].XDR)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse return value: %w", err)
+	}
+
+	outcomeU32, err := soroban.DecodeU32(returnVal)
+	if err != nil {
+		return "", fmt.Errorf("failed to decode winning outcome: %w", err)
+	}
+
+	outcome, err := soroban.U32ToOutcome(outcomeU32)
+	if err != nil {
+		return "", fmt.Errorf("failed to convert outcome: %w", err)
+	}
+
+	return outcome, nil
 }
 
 // calculatePrices calculates YES and NO prices using LMSR formula.

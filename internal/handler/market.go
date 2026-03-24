@@ -288,9 +288,8 @@ func (h *MarketHandler) handleMarketDetail(w http.ResponseWriter, r *http.Reques
 		PriceNo:  state.PriceNo,
 	}
 
-	// TODO: fetch actual winning outcome from contract (get_state doesn't return it yet)
-	if state.Resolved {
-		market.Resolution = model.OutcomeYes
+	if state.Resolved && state.WinningOutcome != "" {
+		market.Resolution = model.Outcome(state.WinningOutcome)
 	}
 
 	// Fetch metadata from IPFS
@@ -780,8 +779,8 @@ func (h *MarketHandler) handleOutcomePage(w http.ResponseWriter, r *http.Request
 		PriceNo:  state.PriceNo,
 	}
 
-	if state.Resolved {
-		market.Resolution = model.OutcomeYes // TODO: get actual resolution
+	if state.Resolved && state.WinningOutcome != "" {
+		market.Resolution = model.Outcome(state.WinningOutcome)
 	}
 
 	if state.MetadataHash != "" && h.ipfsClient != nil {
